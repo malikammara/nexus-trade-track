@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -64,6 +64,19 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
       nots_generated: 0,
     }
   })
+
+  useEffect(() => {
+    if (client) {
+      form.reset({
+        name: client.name,
+        margin_in: client.margin_in,
+        overall_margin: client.overall_margin,
+        invested_amount: client.invested_amount,
+        monthly_revenue: client.monthly_revenue,
+        nots_generated: client.nots_generated,
+      })
+    }
+  }, [client, form])
 
   if (!isAdmin) return null
 

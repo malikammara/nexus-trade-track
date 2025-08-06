@@ -33,6 +33,16 @@ export interface MonthlyPerformance {
   client?: Client;
 }
 
+export interface DailyPerformance {
+  id: string;
+  client_id: string;
+  entry_date: string;
+  margin_in: number;
+  overall_margin: number;
+  created_at: string;
+  client?: Client;
+}
+
 export interface TeamSettings {
   id: string;
   commission_threshold_pkr: number;

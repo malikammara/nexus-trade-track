@@ -139,8 +139,12 @@ export default function Dashboard() {
                   <span className="font-medium">{stats.target_nots - stats.total_nots}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Target per client:</span>
-                  <span className="font-medium">50 NOTs</span>
+                  <span className="text-muted-foreground">Daily target:</span>
+                  <span className="font-medium">{stats.daily_target_nots}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Weekly target:</span>
+                  <span className="font-medium">{stats.weekly_target_nots}</span>
                 </div>
               </div>
             </div>

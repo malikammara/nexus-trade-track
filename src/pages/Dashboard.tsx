@@ -8,19 +8,10 @@ import {
   PieChart,
   BarChart3
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { DashboardStats } from "@/types";
+import { useDashboard } from "@/hooks/useDashboard";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
-    total_clients: 12,
-    total_margin_in: 2450000,
-    total_overall_margin: 3100000,
-    total_monthly_revenue: 890000,
-    total_nots: 142,
-    target_nots: 600,
-    progress_percentage: 23.67
-  });
+  const { stats, loading, error } = useDashboard();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-PK', {
@@ -31,6 +22,29 @@ export default function Dashboard() {
     }).format(amount);
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-foreground">Performance Dashboard</h1>
+          <p className="text-muted-foreground">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !stats) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-foreground">Performance Dashboard</h1>
+          <p className="text-muted-foreground text-red-500">
+            Error loading dashboard data. Please check your database connection.
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       {/* Header */}

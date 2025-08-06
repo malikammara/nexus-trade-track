@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
+import { UserMenu } from "./UserMenu";
 import { 
   BarChart3, 
   Users, 
@@ -68,6 +69,7 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <UserMenu />
             
             {/* Mobile menu button */}
             <Button

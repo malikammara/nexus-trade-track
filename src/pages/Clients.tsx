@@ -2,62 +2,38 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Plus, 
-  Edit, 
   Users, 
   TrendingUp, 
   DollarSign,
   Target,
-  Search
+  Search,
+  Loader2,
+  Trash2
 } from "lucide-react";
 import { Client } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { useClients } from "@/hooks/useClients";
+import { ClientForm } from "@/components/ClientForm";
+import { useAuth } from "@/contexts/AuthProvider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Clients() {
   const { toast } = useToast();
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: "1",
-      name: "Ahmed Khan Trading Co.",
-      margin_in: 185000,
-      overall_margin: 220000,
-      invested_amount: 1500000,
-      monthly_revenue: 75000,
-      nots_generated: 12,
-      created_at: "2024-01-15T10:00:00Z",
-      updated_at: "2024-01-15T10:00:00Z"
-    },
-    {
-      id: "2", 
-      name: "Karachi Investment Group",
-      margin_in: 320000,
-      overall_margin: 380000,
-      invested_amount: 2200000,
-      monthly_revenue: 95000,
-      nots_generated: 15,
-      created_at: "2024-01-20T14:30:00Z",
-      updated_at: "2024-01-20T14:30:00Z"
-    }
-  ]);
-
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const { isAdmin } = useAuth();
+  const { clients, loading, error, addClient, updateClient, deleteClient } = useClients();
   const [searchTerm, setSearchTerm] = useState("");
-  const [formData, setFormData] = useState({
-    name: "",
-    margin_in: "",
-    overall_margin: "",
-    invested_amount: "",
-    monthly_revenue: ""
-  });
-
-  const calculateNOTs = (marginIn: number) => {
-    return Math.floor(marginIn / 6000);
-  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-PK', {
@@ -68,66 +44,52 @@ export default function Clients() {
     }).format(amount);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const margin_in = parseFloat(formData.margin_in) || 0;
-    const nots_generated = calculateNOTs(margin_in);
-    
-    const clientData = {
-      name: formData.name,
-      margin_in,
-      overall_margin: parseFloat(formData.overall_margin) || 0,
-      invested_amount: parseFloat(formData.invested_amount) || 0,
-      monthly_revenue: parseFloat(formData.monthly_revenue) || 0,
-      nots_generated,
-      updated_at: new Date().toISOString()
-    };
-
-    if (editingClient) {
-      setClients(clients.map(client => 
-        client.id === editingClient.id 
-          ? { ...client, ...clientData }
-          : client
-      ));
-      toast({
-        title: "Client Updated",
-        description: `${clientData.name} has been updated successfully.`,
-      });
-    } else {
-      const newClient: Client = {
-        ...clientData,
-        id: Date.now().toString(),
-        created_at: new Date().toISOString()
-      };
-      setClients([...clients, newClient]);
+  const handleAddClient = async (clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      await addClient(clientData);
       toast({
         title: "Client Added",
         description: `${clientData.name} has been added successfully.`,
       });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add client. Please try again.",
+        variant: "destructive"
+      });
     }
-
-    setFormData({
-      name: "",
-      margin_in: "",
-      overall_margin: "",
-      invested_amount: "",
-      monthly_revenue: ""
-    });
-    setEditingClient(null);
-    setIsDialogOpen(false);
   };
 
-  const handleEdit = (client: Client) => {
-    setEditingClient(client);
-    setFormData({
-      name: client.name,
-      margin_in: client.margin_in.toString(),
-      overall_margin: client.overall_margin.toString(),
-      invested_amount: client.invested_amount.toString(),
-      monthly_revenue: client.monthly_revenue.toString()
-    });
-    setIsDialogOpen(true);
+  const handleUpdateClient = async (id: string, clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      await updateClient(id, clientData);
+      toast({
+        title: "Client Updated",
+        description: `${clientData.name} has been updated successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update client. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteClient = async (client: Client) => {
+    try {
+      await deleteClient(client.id);
+      toast({
+        title: "Client Deleted",
+        description: `${client.name} has been deleted successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete client. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const filteredClients = clients.filter(client =>
@@ -152,114 +114,7 @@ export default function Clients() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              onClick={() => {
-                setEditingClient(null);
-                setFormData({
-                  name: "",
-                  margin_in: "",
-                  overall_margin: "",
-                  invested_amount: "",
-                  monthly_revenue: ""
-                });
-              }}
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Client
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>
-                {editingClient ? "Edit Client" : "Add New Client"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Client Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter client name"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="margin_in">Margin In (PKR)</Label>
-                  <Input
-                    id="margin_in"
-                    type="number"
-                    value={formData.margin_in}
-                    onChange={(e) => setFormData(prev => ({ ...prev, margin_in: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="overall_margin">Overall Margin (PKR)</Label>
-                  <Input
-                    id="overall_margin"
-                    type="number"
-                    value={formData.overall_margin}
-                    onChange={(e) => setFormData(prev => ({ ...prev, overall_margin: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="invested_amount">Invested Amount (PKR)</Label>
-                  <Input
-                    id="invested_amount"
-                    type="number"
-                    value={formData.invested_amount}
-                    onChange={(e) => setFormData(prev => ({ ...prev, invested_amount: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="monthly_revenue">Monthly Revenue (PKR)</Label>
-                  <Input
-                    id="monthly_revenue"
-                    type="number"
-                    value={formData.monthly_revenue}
-                    onChange={(e) => setFormData(prev => ({ ...prev, monthly_revenue: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {formData.margin_in && (
-                <div className="p-3 bg-accent rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    NOTs Generated: <span className="font-medium">{calculateNOTs(parseFloat(formData.margin_in))}</span>
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  {editingClient ? "Update Client" : "Add Client"}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <ClientForm onSubmit={handleAddClient} />
       </div>
 
       {/* Summary Stats */}
@@ -327,14 +182,36 @@ export default function Clients() {
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <CardTitle className="text-lg">{client.name}</CardTitle>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleEdit(client)}
-                  className="h-8 w-8"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1">
+                  <ClientForm 
+                    onSubmit={(data) => handleUpdateClient(client.id, data)} 
+                    client={client} 
+                    isEditing 
+                  />
+                  {isAdmin && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {client.name}? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteClient(client)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               </div>
               <Badge variant="secondary" className="w-fit">
                 {client.nots_generated} NOTs

@@ -4,12 +4,33 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, DollarSign, TrendingUp, Info } from "lucide-react";
 import { Product } from "@/types";
+import { useProducts } from "@/hooks/useProducts";
+import { ProductForm } from "@/components/ProductForm";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Products() {
   const [searchTerm, setSearchTerm] = useState("");
+  const { toast } = useToast();
+  const { products, loading, addProduct, updateProduct } = useProducts();
 
-  // Sample product data - in real app this would come from your database
-  const products: Product[] = [
+  const handleAddProduct = async (productData: Omit<Product, 'id' | 'created_at'>) => {
+    try {
+      await addProduct(productData);
+      toast({
+        title: "Product Added",
+        description: `${productData.name} has been added successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add product.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Keep sample data as fallback
+  const sampleProducts: Product[] = [
     {
       id: "1",
       name: "EUR/USD",
@@ -120,11 +141,13 @@ export default function Products() {
     }
   ];
 
+  const displayProducts = products.length > 0 ? products : sampleProducts;
+  
   const filteredProducts = useMemo(() => {
-    return products.filter(product =>
+    return displayProducts.filter(product =>
       product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm]);
+  }, [displayProducts, searchTerm]);
 
   const formatCurrency = (amount: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', {
@@ -154,10 +177,10 @@ export default function Products() {
   };
 
   const stats = {
-    total_products: products.length,
-    avg_commission: products.reduce((sum, p) => sum + p.commission_usd, 0) / products.length,
-    highest_commission: Math.max(...products.map(p => p.commission_usd)),
-    categories: [...new Set(products.map(p => getProductCategory(p.name).label))].length
+    total_products: displayProducts.length,
+    avg_commission: displayProducts.reduce((sum, p) => sum + p.commission_usd, 0) / displayProducts.length,
+    highest_commission: Math.max(...displayProducts.map(p => p.commission_usd)),
+    categories: [...new Set(displayProducts.map(p => getProductCategory(p.name).label))].length
   };
 
   return (
@@ -168,6 +191,10 @@ export default function Products() {
         <p className="text-muted-foreground">
           Search and explore trading products with commission rates and market data
         </p>
+      </div>
+      
+      <div className="flex justify-end">
+        <ProductForm onSubmit={handleAddProduct} />
       </div>
 
       {/* Stats Overview */}

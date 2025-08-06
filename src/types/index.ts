@@ -49,4 +49,6 @@ export interface DashboardStats {
   total_nots: number;
   target_nots: number;
   progress_percentage: number;
+  daily_target_nots: number;
+  weekly_target_nots: number;
 }

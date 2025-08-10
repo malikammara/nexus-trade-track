@@ -1,82 +1,88 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { DashboardStats, Client } from '@/types'
+import { DashboardStats } from '@/types'
 
-const getWorkingDaysInMonth = (date: Date) => {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  let count = 0
-  for (let day = 1; day <= daysInMonth; day++) {
-    const d = new Date(year, month, day).getDay()
-    if (d !== 0 && d !== 6) count++
-  }
-  return count
+export interface EnhancedDashboardStats extends DashboardStats {
+  total_equity: number
+  monthly_target_nots: number
+  today_nots: number
+  today_margin_added: number
+  today_withdrawals: number
 }
 
 export function useDashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [stats, setStats] = useState<EnhancedDashboardStats | null>(null)
+  const [equityTarget, setEquityTarget] = useState<any>(null)
+  const [retentionMetrics, setRetentionMetrics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchDashboardStats = async () => {
     try {
       setLoading(true)
-      const { data: clients, error } = await supabase
-        .from('clients')
+      
+      // Fetch enhanced dashboard stats
+      const { data: dashboardData, error: dashboardError } = await supabase
+        .from('enhanced_dashboard_stats')
         .select('*')
+        .single()
 
-      if (error) throw error
+      if (dashboardError) throw dashboardError
 
-      const totals = (clients as Client[] | null)?.reduce((acc, c) => ({
-        margin_in: acc.margin_in + Number(c.margin_in),
-        overall_margin: acc.overall_margin + Number(c.overall_margin),
-        revenue: acc.revenue + Number(c.monthly_revenue),
-        nots: acc.nots + Number(c.nots_generated)
-      }), { margin_in: 0, overall_margin: 0, revenue: 0, nots: 0 }) || { margin_in: 0, overall_margin: 0, revenue: 0, nots: 0 }
+      // Fetch equity-based targets
+      const { data: targetData, error: targetError } = await supabase
+        .rpc('calculate_equity_based_target')
 
-      const target_nots = Math.round(totals.margin_in * 0.18)
-      const workingDays = getWorkingDaysInMonth(new Date())
-      const daily_target = workingDays > 0 ? Math.round(target_nots / workingDays) : 0
-      const weekly_target = daily_target * 5
+      if (!targetError && targetData?.[0]) {
+        setEquityTarget(targetData[0])
+      }
 
-      const progress_percentage = target_nots > 0 ? (totals.nots / target_nots) * 100 : 0
+      // Fetch retention metrics
+      const { data: retentionData, error: retentionError } = await supabase
+        .rpc('get_retention_metrics', { days_back: 30 })
 
+      if (!retentionError && retentionData?.[0]) {
+        setRetentionMetrics(retentionData[0])
+      }
+
+      // Set main stats
       setStats({
-        total_clients: clients ? clients.length : 0,
-        total_margin_in: totals.margin_in,
-        total_overall_margin: totals.overall_margin,
-        total_monthly_revenue: totals.revenue,
-        total_nots: totals.nots,
-        target_nots,
-        progress_percentage,
-        daily_target_nots: daily_target,
-        weekly_target_nots: weekly_target
+        total_clients: dashboardData.total_clients || 0,
+        total_margin_in: dashboardData.total_equity || 0, // Using equity as margin
+        total_overall_margin: dashboardData.total_equity || 0,
+        total_monthly_revenue: dashboardData.total_monthly_revenue || 0,
+        total_nots: dashboardData.total_nots || 0,
+        target_nots: Math.round(dashboardData.monthly_target_nots || 0),
+        progress_percentage: dashboardData.progress_percentage || 0,
+        daily_target_nots: Math.round((targetData?.[0]?.daily_target_nots || 0)),
+        weekly_target_nots: Math.round((targetData?.[0]?.weekly_target_nots || 0)),
+        // Enhanced fields
+        total_equity: dashboardData.total_equity || 0,
+        monthly_target_nots: dashboardData.monthly_target_nots || 0,
+        today_nots: dashboardData.today_nots || 0,
+        today_margin_added: dashboardData.today_margin_added || 0,
+        today_withdrawals: dashboardData.today_withdrawals || 0
       })
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
 
-      const fallbackTotals = {
-        margin_in: 2450000,
-        overall_margin: 3100000,
-        revenue: 890000,
-        nots: 142
-      }
-      const target_nots = Math.round(fallbackTotals.margin_in * 0.18)
-      const workingDays = getWorkingDaysInMonth(new Date())
-      const daily_target = workingDays > 0 ? Math.round(target_nots / workingDays) : 0
-      const weekly_target = daily_target * 5
-
+      // Fallback data
       setStats({
         total_clients: 12,
-        total_margin_in: fallbackTotals.margin_in,
-        total_overall_margin: fallbackTotals.overall_margin,
-        total_monthly_revenue: fallbackTotals.revenue,
-        total_nots: fallbackTotals.nots,
-        target_nots,
-        progress_percentage: target_nots > 0 ? (fallbackTotals.nots / target_nots) * 100 : 0,
-        daily_target_nots: daily_target,
-        weekly_target_nots: weekly_target
+        total_margin_in: 2450000,
+        total_overall_margin: 3100000,
+        total_monthly_revenue: 890000,
+        total_nots: 142,
+        target_nots: 441,
+        progress_percentage: 32.2,
+        daily_target_nots: 20,
+        weekly_target_nots: 100,
+        total_equity: 3100000,
+        monthly_target_nots: 558000,
+        today_nots: 5,
+        today_margin_added: 25000,
+        today_withdrawals: 10000
       })
     } finally {
       setLoading(false)
@@ -89,6 +95,8 @@ export function useDashboard() {
 
   return {
     stats,
+    equityTarget,
+    retentionMetrics,
     loading,
     error,
     refetch: fetchDashboardStats

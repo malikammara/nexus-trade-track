@@ -17,6 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useClients } from "@/hooks/useClients";
 import { ClientForm } from "@/components/ClientForm";
 import { useAuth } from "@/contexts/AuthProvider";
+import { useDailyTransactions } from "@/hooks/useDailyTransactions";
+import { TransactionForm } from "@/components/TransactionForm";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +35,7 @@ export default function Clients() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { clients, loading, error, addClient, updateClient, deleteClient } = useClients();
+  const { addTransaction } = useDailyTransactions();
   const [searchTerm, setSearchTerm] = useState("");
 
   const formatCurrency = (amount: number) => {
@@ -87,6 +90,27 @@ export default function Clients() {
       toast({
         title: "Error",
         description: "Failed to delete client. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddTransaction = async (
+    clientId: string,
+    transactionType: 'margin_add' | 'withdrawal' | 'commission',
+    amount: number,
+    description?: string
+  ) => {
+    try {
+      await addTransaction(clientId, transactionType, amount, description);
+      toast({
+        title: "Transaction Added",
+        description: `${transactionType.replace('_', ' ')} of ${formatCurrency(amount)} recorded successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add transaction. Please try again.",
         variant: "destructive"
       });
     }
@@ -220,15 +244,15 @@ export default function Clients() {
             <CardContent className="space-y-3">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">CS Margin:</span>
+                  <span className="text-muted-foreground">Current Equity:</span>
                   <span className="font-medium text-trading-profit">
-                    {formatCurrency(client.margin_in)}
+                    {formatCurrency(client.overall_margin)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Overall Margin:</span>
+                  <span className="text-muted-foreground">Initial Margin:</span>
                   <span className="font-medium">
-                    {formatCurrency(client.overall_margin)}
+                    {formatCurrency(client.margin_in)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -242,6 +266,39 @@ export default function Clients() {
                   <span className="font-medium">
                     {formatCurrency(client.monthly_revenue)}
                   </span>
+                </div>
+              </div>
+              
+              {/* Transaction Actions */}
+              <div className="pt-3 border-t border-border">
+                <div className="flex gap-2">
+                  <TransactionForm
+                    clientId={client.id}
+                    clientName={client.name}
+                    onSubmit={handleAddTransaction}
+                    transactionType="margin_add"
+                    buttonText="Add Margin"
+                    buttonVariant="outline"
+                    buttonSize="sm"
+                  />
+                  <TransactionForm
+                    clientId={client.id}
+                    clientName={client.name}
+                    onSubmit={handleAddTransaction}
+                    transactionType="withdrawal"
+                    buttonText="Withdrawal"
+                    buttonVariant="outline"
+                    buttonSize="sm"
+                  />
+                  <TransactionForm
+                    clientId={client.id}
+                    clientName={client.name}
+                    onSubmit={handleAddTransaction}
+                    transactionType="commission"
+                    buttonText="Commission"
+                    buttonVariant="outline"
+                    buttonSize="sm"
+                  />
                 </div>
               </div>
             </CardContent>

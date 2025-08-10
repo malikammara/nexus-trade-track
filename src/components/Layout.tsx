@@ -22,7 +22,7 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "Products", href: "/products", icon: Search },
-  { name: "Performance", href: "/performance", icon: TrendingUp },
+  { name: "Analytics", href: "/analytics", icon: TrendingUp },
 ];
 
 export function Layout({ children }: LayoutProps) {

@@ -93,7 +93,7 @@ export default function Analytics() {
   };
 
   const progressPercentage = equityTarget?.monthly_target_nots > 0 
-    ? (analytics.totalNOTs / equityTarget.monthly_target_nots) * 100 
+    ? (analytics.totalNOTs / equityTarget.monthly_target_nots/6000) * 100 
     : 0;
 
   return (

@@ -83,7 +83,7 @@ export default function Dashboard() {
               {formatCurrency((stats as EnhancedDashboardStats).total_equity)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {formatCurrency((stats as EnhancedDashboardStats).monthly_target_nots)}
+              Target: {formatCurrency((stats as EnhancedDashboardStats).monthly_target_nots/6000)}
             </p>
           </CardContent>
         </Card>
@@ -109,7 +109,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.total_nots}</div>
             <p className="text-xs text-muted-foreground">
-              of {stats.target_nots} target
+              of {stats.target_nots/6000} target
             </p>
           </CardContent>
         </Card>
@@ -127,7 +127,7 @@ export default function Dashboard() {
               {(stats as EnhancedDashboardStats).today_nots}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {stats.daily_target_nots} daily
+              Target: {stats.daily_target_nots/6000} daily
             </p>
           </CardContent>
         </Card>
@@ -171,7 +171,7 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Current NOTs</span>
-                <span className="font-medium">{stats.total_nots} / {stats.target_nots}</span>
+                <span className="font-medium">{stats.total_nots} / {stats.target_nots/6000}</span>
               </div>
               <Progress 
                 value={stats.progress_percentage} 
@@ -186,15 +186,15 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Remaining NOTs needed:</span>
-                  <span className="font-medium">{stats.target_nots - stats.total_nots}</span>
+                  <span className="font-medium">{stats.target_nots/6000 - stats.total_nots}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Daily target:</span>
-                  <span className="font-medium">{stats.daily_target_nots}</span>
+                  <span className="font-medium">{stats.daily_target_nots/6000}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Weekly target:</span>
-                  <span className="font-medium">{stats.weekly_target_nots}</span>
+                  <span className="font-medium">{stats.weekly_target_nots/6000}</span>
                 </div>
               </div>
             </div>

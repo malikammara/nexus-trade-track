@@ -63,14 +63,13 @@ AS $$
 DECLARE
   new_client clients%ROWTYPE;
 BEGIN
-  INSERT INTO clients(name, margin_in, overall_margin, invested_amount, monthly_revenue, nots_generated)
+  INSERT INTO clients(name, margin_in, overall_margin, invested_amount, monthly_revenue)
   VALUES (
     add_client.name,
     add_client.margin_in,
     add_client.overall_margin,
     add_client.invested_amount,
-    add_client.monthly_revenue,
-    calculate_client_nots(add_client.margin_in)
+    add_client.monthly_revenue
   )
   RETURNING * INTO new_client;
 

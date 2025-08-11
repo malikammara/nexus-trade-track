@@ -62,3 +62,11 @@ export interface DashboardStats {
   daily_target_nots: number;
   weekly_target_nots: number;
 }
+
+export type NewClient = {
+  name: string;
+  margin_in: number;
+  overall_margin: number;
+  invested_amount: number;
+  monthly_revenue: number;
+};

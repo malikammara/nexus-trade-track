@@ -49,7 +49,8 @@ export default function Clients() {
 
   const handleAddClient = async (clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      await addClient(clientData);
+      const { id, created_at, updated_at, nots_generated, ...payload } = clientData;
+      await addClient(payload as any);
       toast({
         title: "Client Added",
         description: `${clientData.name} has been added successfully.`,
@@ -65,7 +66,8 @@ export default function Clients() {
 
   const handleUpdateClient = async (id: string, clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      await updateClient(id, clientData);
+      const { id, created_at, updated_at, nots_generated, ...payload } = clientData;
+      await updateClient(id, payload as any);
       toast({
         title: "Client Updated",
         description: `${clientData.name} has been updated successfully.`,

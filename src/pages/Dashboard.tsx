@@ -174,11 +174,11 @@ export default function Dashboard() {
                 <span className="font-medium">{stats.total_nots} / {stats.target_nots/6000}</span>
               </div>
               <Progress 
-                value={stats.progress_percentage} 
+                value={(stats.total_nots / (stats.target_nots / 6000)) * 100}
                 className="h-2"
               />
               <p className="text-xs text-muted-foreground">
-                {stats.progress_percentage.toFixed(1)}% of monthly target achieved
+                {((stats.total_nots / (stats.target_nots / 6000)) * 100).toFixed(1)}% of monthly target achieved
               </p>
             </div>
             

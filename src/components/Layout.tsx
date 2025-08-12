@@ -41,6 +41,8 @@ export function Layout({ children }: LayoutProps) {
               </div>
               <span className="text-lg font-semibold text-foreground">
                 Daily Trade Count
+              </span>
+            </Link>
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">

@@ -29,6 +29,9 @@ export default function Products() {
     }
   };
 
+  // Keep sample data as fallback
+  const sampleProducts: Product[] = [];
+
   const displayProducts = products.length > 0 ? products : sampleProducts;
   
   const filteredProducts = useMemo(() => {

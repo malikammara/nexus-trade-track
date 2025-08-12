@@ -40,9 +40,7 @@ export function Layout({ children }: LayoutProps) {
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-lg font-semibold text-foreground">
-                Nexus Trade Track
-              </span>
-            </Link>
+                Daily Trade Count
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">

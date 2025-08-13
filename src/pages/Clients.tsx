@@ -185,7 +185,7 @@ export default function Clients() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalStats.total_nots}</div>
+            <div className="text-2xl font-bold">{totalStats.total_nots.toFixed(2)}</div>
           </CardContent>
         </Card>
       </div>
@@ -240,7 +240,7 @@ export default function Clients() {
                 </div>
               </div>
               <Badge variant="secondary" className="w-fit">
-                {client.nots_generated} NOTs
+                {client.nots_generated.toFixed(2)} NOTs
               </Badge>
             </CardHeader>
             <CardContent className="space-y-3">

@@ -62,6 +62,9 @@ export default function Analytics() {
     }).format(amount);
   };
 
+  const formatDecimal = (value: number, decimals: number = 2) => {
+    return Number(value).toFixed(decimals);
+  };
   // Calculate analytics from transactions
   const analytics = {
     totalCommission: transactions
@@ -92,8 +95,15 @@ export default function Analytics() {
     )
   };
 
-  const progressPercentage = equityTarget?.monthly_target_nots > 0 
-    ? (analytics.totalNOTs / equityTarget.monthly_target_nots) * 100 
+  // Calculate correct NOTs target: (total_equity * 18%) / 6000
+  const monthlyTargetNOTs = equityTarget?.total_equity 
+    ? (equityTarget.total_equity * 0.18) / 6000 
+    : 0;
+  
+  const dailyTargetNOTs = monthlyTargetNOTs / 22; // Assuming 22 working days
+  
+  const progressPercentage = monthlyTargetNOTs > 0 
+    ? (analytics.totalNOTs / monthlyTargetNOTs) * 100 
     : 0;
 
   return (
@@ -142,10 +152,10 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
-              {analytics.totalNOTs.toFixed(1)}
+              {formatDecimal(analytics.totalNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {equityTarget?.monthly_target_nots?.toFixed(1) || 0}
+              Target: {formatDecimal(monthlyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -187,10 +197,10 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {analytics.dailyAvgNOTs.toFixed(1)}
+              {formatDecimal(analytics.dailyAvgNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {equityTarget?.daily_target_nots?.toFixed(1) || 0}
+              Target: {formatDecimal(dailyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -202,7 +212,7 @@ export default function Analytics() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Monthly Progress (18% Equity Target)
+              Monthly Progress (18% Equity ÷ 6000)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -210,7 +220,7 @@ export default function Analytics() {
               <div className="flex justify-between text-sm">
                 <span>Progress</span>
                 <span className="font-medium">
-                  {analytics.totalNOTs.toFixed(1)} / {equityTarget?.monthly_target_nots?.toFixed(1) || 0}
+                  {formatDecimal(analytics.totalNOTs)} / {formatDecimal(monthlyTargetNOTs)}
                 </span>
               </div>
               <div className="w-full bg-secondary rounded-full h-2">
@@ -220,7 +230,7 @@ export default function Analytics() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {progressPercentage.toFixed(1)}% of monthly target achieved
+                {formatDecimal(progressPercentage)}% of monthly target achieved
               </p>
             </div>
             
@@ -238,7 +248,7 @@ export default function Analytics() {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Remaining NOTs:</span>
                 <span className="font-medium">
-                  {Math.max(0, (equityTarget?.monthly_target_nots || 0) - analytics.totalNOTs).toFixed(1)}
+                  {formatDecimal(Math.max(0, monthlyTargetNOTs - analytics.totalNOTs))}
                 </span>
               </div>
             </div>
@@ -263,7 +273,7 @@ export default function Analytics() {
                 </div>
                 <div className="text-right">
                   <p className="text-2xl font-bold text-trading-profit">
-                    {analytics.bestDay?.total_nots_achieved?.toFixed(1) || 0}
+                    {formatDecimal(analytics.bestDay?.total_nots_achieved || 0)}
                   </p>
                   <p className="text-xs text-muted-foreground">NOTs</p>
                 </div>
@@ -295,7 +305,7 @@ export default function Analytics() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Retention Rate:</span>
                   <span className="font-medium text-trading-profit">
-                    {retentionMetrics?.retention_rate?.toFixed(1) || 0}%
+                    {formatDecimal(retentionMetrics?.retention_rate || 0)}%
                   </span>
                 </div>
               </div>
@@ -329,7 +339,7 @@ export default function Analytics() {
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">NOTs</p>
                     <p className="font-bold text-trading-profit">
-                      {day.total_nots_achieved.toFixed(1)}
+                      {formatDecimal(day.total_nots_achieved)}
                     </p>
                   </div>
                   <div className="text-right">

@@ -28,6 +28,7 @@ export default function Dashboard() {
   const formatDecimal = (value: number, decimals: number = 2) => {
     return Number(value).toFixed(decimals);
   };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -51,6 +52,28 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  // --- FRONTEND FIX: correct NOTs targets (18% of equity ÷ 6000) ---
+  const EQUITY_TARGET_RATE = 0.18;
+  const NOT_DENOMINATOR = 6000;
+
+  const totalEquity = (stats as EnhancedDashboardStats).total_equity || 0;
+  const monthlyTargetNots = totalEquity > 0
+    ? (totalEquity * EQUITY_TARGET_RATE) / NOT_DENOMINATOR
+    : 0;
+
+  // Assumptions for breakdowns (adjust if you use business-specific calendars)
+  const dailyTargetNots = monthlyTargetNots / 30;       // simple monthly average
+  const weeklyTargetNots = dailyTargetNots * 7;         // rolling week
+
+  const currentNots = stats.total_nots || 0;
+  const progressPercentage = monthlyTargetNots > 0
+    ? Math.min(100, (currentNots / monthlyTargetNots) * 100)
+    : 0;
+
+  const remainingNots = Math.max(0, monthlyTargetNots - currentNots);
+  // -----------------------------------------------------------------
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -83,10 +106,10 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
-              {formatCurrency((stats as EnhancedDashboardStats).total_equity)}
+              {formatCurrency(totalEquity)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {formatDecimal((stats as EnhancedDashboardStats).monthly_target_nots)} NOTs
+              Target: {formatDecimal(monthlyTargetNots)} NOTs
             </p>
           </CardContent>
         </Card>
@@ -110,9 +133,9 @@ export default function Dashboard() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatDecimal(stats.total_nots)}</div>
+            <div className="text-2xl font-bold">{formatDecimal(currentNots)}</div>
             <p className="text-xs text-muted-foreground">
-              of {formatDecimal(stats.target_nots)} target
+              of {formatDecimal(monthlyTargetNots)} target
             </p>
           </CardContent>
         </Card>
@@ -130,7 +153,7 @@ export default function Dashboard() {
               {formatDecimal((stats as EnhancedDashboardStats).today_nots)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {formatDecimal(stats.daily_target_nots)} daily
+              Target: {formatDecimal(dailyTargetNots)} daily
             </p>
           </CardContent>
         </Card>
@@ -161,6 +184,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
       {/* Performance Overview */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-card">
@@ -174,14 +198,13 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Current NOTs</span>
-                <span className="font-medium">{formatDecimal(stats.total_nots)} / {formatDecimal(stats.target_nots)}</span>
+                <span className="font-medium">
+                  {formatDecimal(currentNots)} / {formatDecimal(monthlyTargetNots)}
+                </span>
               </div>
-              <Progress 
-                value={stats.progress_percentage}
-                className="h-2"
-              />
+              <Progress value={progressPercentage} className="h-2" />
               <p className="text-xs text-muted-foreground">
-                {formatDecimal(stats.progress_percentage)}% of monthly target achieved
+                {formatDecimal(progressPercentage)}% of monthly target achieved
               </p>
             </div>
             
@@ -189,15 +212,15 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Remaining NOTs needed:</span>
-                  <span className="font-medium">{formatDecimal(Math.max(0, stats.target_nots - stats.total_nots))}</span>
+                  <span className="font-medium">{formatDecimal(remainingNots)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Daily target:</span>
-                  <span className="font-medium">{formatDecimal(stats.daily_target_nots)}</span>
+                  <span className="font-medium">{formatDecimal(dailyTargetNots)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Weekly target:</span>
-                  <span className="font-medium">{formatDecimal(stats.weekly_target_nots)}</span>
+                  <span className="font-medium">{formatDecimal(weeklyTargetNots)}</span>
                 </div>
               </div>
             </div>

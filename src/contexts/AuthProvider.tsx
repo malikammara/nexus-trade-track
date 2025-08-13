@@ -18,7 +18,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const isAdmin = user?.email === 'doctorcrack007@gmail.com'
+  const isAdmin = user?.email === 'doctorcrack007@gmail.com' || 'syedyousufhussainzaidi@gmail.com'
 
   useEffect(() => {
     // Get initial session

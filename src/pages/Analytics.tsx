@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,15 @@ import {
   TrendingUp, 
   Target, 
   Award,
-  Users,
   DollarSign,
   BarChart3,
   ArrowUpRight,
   ArrowDownRight
 } from "lucide-react";
-import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
-import { cn } from "@/lib/utils";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { useDailyTransactions } from "@/hooks/useDailyTransactions";
+
+const NOT_DENOMINATOR = 6000;
 
 export default function Analytics() {
   const [dateRange, setDateRange] = useState<{from: Date, to: Date}>({
@@ -33,7 +33,7 @@ export default function Analytics() {
     loading 
   } = useDailyTransactions();
   
-  const [equityTarget, setEquityTarget] = useState<any>(null);
+  const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
   const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
 
   useEffect(() => {
@@ -43,67 +43,94 @@ export default function Analytics() {
           getEquityBasedTarget(),
           getRetentionMetrics(30)
         ]);
-        setEquityTarget(targetData);
+        setEquityTargetRaw(targetData);
         setRetentionMetrics(retentionData);
       } catch (error) {
-        console.error('Failed to fetch metrics:', error);
+        console.error("Failed to fetch metrics:", error);
       }
     };
 
     fetchMetrics();
   }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
+  // Normalize API target shape (supports row or [row])
+  const equityTarget = useMemo(() => {
+    if (!equityTargetRaw) return null;
+    return Array.isArray(equityTargetRaw) ? equityTargetRaw[0] : equityTargetRaw;
+  }, [equityTargetRaw]);
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("en-PK", {
+      style: "currency",
+      currency: "PKR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
-  };
+    }).format(amount ?? 0);
 
-  const formatDecimal = (value: number, decimals: number = 2) => {
-    return Number(value).toFixed(decimals);
-  };
-  // Calculate analytics from transactions
-  const analytics = {
-    totalCommission: transactions
-      .filter(t => t.transaction_type === 'commission')
-      .reduce((sum, t) => sum + t.amount, 0),
-    
-    totalMarginAdded: transactions
-      .filter(t => t.transaction_type === 'margin_add')
-      .reduce((sum, t) => sum + t.amount, 0),
-    
-    totalWithdrawals: transactions
-      .filter(t => t.transaction_type === 'withdrawal')
-      .reduce((sum, t) => sum + t.amount, 0),
-    
-    totalNOTs: transactions
-      .filter(t => t.transaction_type === 'commission')
-      .reduce((sum, t) => sum + t.nots_generated, 0),
-    
-    dailyAvgNOTs: dailyNOTs.length > 0 
-      ? dailyNOTs.reduce((sum, d) => sum + d.total_nots_achieved, 0) / dailyNOTs.length 
-      : 0,
-    
-    workingDays: dailyNOTs.filter(d => d.working_day).length,
-    
-    bestDay: dailyNOTs.reduce((best, current) => 
-      current.total_nots_achieved > (best?.total_nots_achieved || 0) ? current : best, 
-      null as any
-    )
-  };
+  const formatDecimal = (value: number, decimals: number = 2) =>
+    Number(value ?? 0).toFixed(decimals);
 
-  // Calculate correct NOTs target: (total_equity * 18%) / 6000
-  const monthlyTargetNOTs = equityTarget?.total_equity 
-    ? (equityTarget.total_equity * 0.18) / 6000 
-    : 0;
-  
-  const dailyTargetNOTs = monthlyTargetNOTs / 22; // Assuming 22 working days
-  
-  const progressPercentage = monthlyTargetNOTs > 0 
-    ? (analytics.totalNOTs / monthlyTargetNOTs) * 100 
+  // ---------- Aggregations ----------
+  const analytics = useMemo(() => {
+    const commission = transactions
+      .filter(t => t.transaction_type === "commission")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const marginAdd = transactions
+      .filter(t => t.transaction_type === "margin_add")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const withdrawals = transactions
+      .filter(t => t.transaction_type === "withdrawal")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalNOTs = transactions
+      .filter(t => t.transaction_type === "commission")
+      .reduce((sum, t) => sum + (t.nots_generated || 0), 0);
+
+    const workingDays = dailyNOTs.filter(d => d.working_day).length;
+
+    const bestDay = dailyNOTs.reduce((best: any, current: any) =>
+      current.total_nots_achieved > (best?.total_nots_achieved || 0) ? current : best, null as any
+    );
+
+    const dailyAvgNOTs = dailyNOTs.length > 0
+      ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) / dailyNOTs.length
+      : 0;
+
+    return {
+      totalCommission: commission,
+      totalMarginAdded: marginAdd,
+      totalWithdrawals: withdrawals,
+      totalNOTs,
+      dailyAvgNOTs,
+      workingDays,
+      bestDay
+    };
+  }, [transactions, dailyNOTs]);
+
+  // ---------- Targets (prefer API, fallback to formula) ----------
+  const monthlyTargetNOTs = useMemo(() => {
+    if (equityTarget?.monthly_target_nots != null) {
+      return (equityTarget.monthly_target_nots || 0) / NOT_DENOMINATOR; // API PKR -> NOTs
+    }
+    // Fallback: (total_equity * 0.18) / 6000
+    if (equityTarget?.total_equity) {
+      return (equityTarget.total_equity * 0.18) / NOT_DENOMINATOR;
+    }
+    return 0;
+  }, [equityTarget]);
+
+  const dailyTargetNOTs = useMemo(() => {
+    if (equityTarget?.daily_target_nots != null) {
+      return (equityTarget.daily_target_nots || 0) / NOT_DENOMINATOR; // API PKR -> NOTs
+    }
+    // Fallback to 22 working days assumption
+    return monthlyTargetNOTs / 22;
+  }, [equityTarget, monthlyTargetNOTs]);
+
+  const progressPercentage = monthlyTargetNOTs > 0
+    ? (analytics.totalNOTs / monthlyTargetNOTs) * 100
     : 0;
 
   return (
@@ -120,7 +147,7 @@ export default function Analytics() {
         <div className="flex gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[240px] justify-start text-left font-normal">
+              <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
               </Button>
@@ -155,7 +182,7 @@ export default function Analytics() {
               {formatDecimal(analytics.totalNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {formatDecimal(monthlyTargetNOTs)}
+              Target (month): {formatDecimal(monthlyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -200,7 +227,7 @@ export default function Analytics() {
               {formatDecimal(analytics.dailyAvgNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: {formatDecimal(dailyTargetNOTs)}
+              Target (day): {formatDecimal(dailyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -212,7 +239,7 @@ export default function Analytics() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Monthly Progress (18% Equity ÷ 6000)
+              Monthly Progress (API targets ÷ 6000)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -268,7 +295,7 @@ export default function Analytics() {
                 <div>
                   <p className="font-medium">Best Day</p>
                   <p className="text-sm text-muted-foreground">
-                    {analytics.bestDay ? format(new Date(analytics.bestDay.tracking_date), 'MMM dd') : 'N/A'}
+                    {analytics.bestDay ? format(new Date(analytics.bestDay.tracking_date), "MMM dd") : "N/A"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -314,7 +341,7 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Recent Daily Performance */}
+      {/* Recent Daily Performance (now shows daily target vs achieved) */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -324,33 +351,64 @@ export default function Analytics() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {dailyNOTs.slice(0, 10).map((day) => (
-              <div key={day.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="text-sm font-medium">
-                    {format(new Date(day.tracking_date), 'MMM dd, yyyy')}
+            {dailyNOTs.slice(0, 10).map((day: any) => {
+              const achieved = day.total_nots_achieved || 0;
+              // Use API daily target for each working day; zero for weekends unless you want same target.
+              const targetForDay = day.working_day ? dailyTargetNOTs : 0;
+              const delta = achieved - targetForDay;
+              const met = achieved >= targetForDay && day.working_day;
+
+              return (
+                <div key={day.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-medium">
+                      {format(new Date(day.tracking_date), "MMM dd, yyyy")}
+                    </div>
+                    {!day.working_day && (
+                      <Badge variant="secondary" className="text-xs">Weekend</Badge>
+                    )}
                   </div>
-                  {!day.working_day && (
-                    <Badge variant="secondary" className="text-xs">Weekend</Badge>
-                  )}
+
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Target (NOTs)</p>
+                      <p className="font-medium">{formatDecimal(targetForDay)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Achieved (NOTs)</p>
+                      <p className="font-bold {met ? 'text-trading-profit' : ''}">
+                        {formatDecimal(achieved)}
+                      </p>
+                    </div>
+                    <div className="text-right min-w-[110px]">
+                      <p className="text-xs text-muted-foreground">Delta</p>
+                      <div className="flex items-center justify-end gap-1">
+                        {met ? (
+                          <Badge variant="default" className="bg-trading-profit text-white">Met</Badge>
+                        ) : (
+                          <Badge variant="destructive">Shortfall</Badge>
+                        )}
+                        <span className={met ? "text-trading-profit font-medium" : "text-trading-loss font-medium"}>
+                          {delta >= 0 ? "+" : ""}
+                          {formatDecimal(delta)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="hidden md:block w-32">
+                      {/* tiny inline progress bar for the day */}
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${met ? "bg-trading-profit" : "bg-trading-loss"}`}
+                          style={{
+                            width: `${Math.min(100, targetForDay > 0 ? (achieved / targetForDay) * 100 : 0)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">NOTs</p>
-                    <p className="font-bold text-trading-profit">
-                      {formatDecimal(day.total_nots_achieved)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Commission</p>
-                    <p className="font-medium">
-                      {formatCurrency(day.total_commission_pkr)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

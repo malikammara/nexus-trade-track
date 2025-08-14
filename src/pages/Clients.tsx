@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Users, 
-  TrendingUp, 
+import {
+  Users,
+  TrendingUp,
   DollarSign,
   Target,
   Search,
   Loader2,
-  Trash2
+  Trash2,
 } from "lucide-react";
 import { Client } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -30,53 +30,80 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type SortKey = "none" | "equity" | "revenue";
+type SortDir = "asc" | "desc";
 
 export default function Clients() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { clients, loading, error, addClient, updateClient, deleteClient } = useClients();
   const { addTransaction } = useDailyTransactions();
+
+  // Search
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Filters
+  const [minEquity, setMinEquity] = useState<string>("");
+  const [maxEquity, setMaxEquity] = useState<string>("");
+  const [minRevenue, setMinRevenue] = useState<string>("");
+  const [maxRevenue, setMaxRevenue] = useState<string>("");
+
+  // Sorting
+  const [sortKey, setSortKey] = useState<SortKey>("none");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
+    return new Intl.NumberFormat("en-PK", {
+      style: "currency",
+      currency: "PKR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
   };
 
-  const handleAddClient = async (clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleAddClient = async (
+    clientData: Omit<Client, "id" | "created_at" | "updated_at">
+  ) => {
     try {
-      const { id, created_at, updated_at, nots_generated, ...payload } = clientData;
+      const { id, created_at, updated_at, nots_generated, ...payload } = clientData as any;
       await addClient(payload as any);
       toast({
         title: "Client Added",
         description: `${clientData.name} has been added successfully.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to add client. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
 
-  const handleUpdateClient = async (id: string, clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleUpdateClient = async (
+    id: string,
+    clientData: Omit<Client, "id" | "created_at" | "updated_at">
+  ) => {
     try {
-      const { id, created_at, updated_at, nots_generated, ...payload } = clientData;
+      const { id: _id, created_at, updated_at, nots_generated, ...payload } = clientData as any;
       await updateClient(id, payload as any);
       toast({
         title: "Client Updated",
         description: `${clientData.name} has been updated successfully.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update client. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
@@ -88,18 +115,18 @@ export default function Clients() {
         title: "Client Deleted",
         description: `${client.name} has been deleted successfully.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete client. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
 
   const handleAddTransaction = async (
     clientId: string,
-    transactionType: 'margin_add' | 'withdrawal' | 'commission',
+    transactionType: "margin_add" | "withdrawal" | "commission",
     amount: number,
     description?: string
   ) => {
@@ -107,27 +134,94 @@ export default function Clients() {
       await addTransaction(clientId, transactionType, amount, description);
       toast({
         title: "Transaction Added",
-        description: `${transactionType.replace('_', ' ')} of ${formatCurrency(amount)} recorded successfully.`,
+        description: `${transactionType.replace("_", " ")} of ${formatCurrency(
+          amount
+        )} recorded successfully.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to add transaction. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
 
-  const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchTerm.toLowerCase())
+  // Helpers for safe numeric parsing
+  const num = (v: string) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  // Derived: filtered + searched + sorted
+  const visibleClients = useMemo(() => {
+    const minEq = num(minEquity);
+    const maxEq = num(maxEquity);
+    const minRev = num(minRevenue);
+    const maxRev = num(maxRevenue);
+
+    let list = [...clients];
+
+    // Search (works with/without filters)
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter((c) => c.name.toLowerCase().includes(q));
+    }
+
+    // Filters
+    list = list.filter((c) => {
+      const equity = c.overall_margin ?? 0; // Equity
+      const revenue = c.monthly_revenue ?? 0; // Revenue generated
+      if (minEq !== undefined && equity < minEq) return false;
+      if (maxEq !== undefined && equity > maxEq) return false;
+      if (minRev !== undefined && revenue < minRev) return false;
+      if (maxRev !== undefined && revenue > maxRev) return false;
+      return true;
+    });
+
+    // Sorting
+    if (sortKey !== "none") {
+      list.sort((a, b) => {
+        const aVal = sortKey === "equity" ? a.overall_margin : a.monthly_revenue;
+        const bVal = sortKey === "equity" ? b.overall_margin : b.monthly_revenue;
+        const diff = (aVal ?? 0) - (bVal ?? 0);
+        return sortDir === "asc" ? diff : -diff;
+      });
+    }
+
+    return list;
+  }, [
+    clients,
+    searchTerm,
+    minEquity,
+    maxEquity,
+    minRevenue,
+    maxRevenue,
+    sortKey,
+    sortDir,
+  ]);
+
+  const totalStats = clients.reduce(
+    (acc, client) => ({
+      total_margin_in: acc.total_margin_in + (client.margin_in ?? 0),
+      total_overall_margin: acc.total_overall_margin + (client.overall_margin ?? 0),
+      total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0),
+      total_nots: acc.total_nots + (client.nots_generated ?? 0),
+    }),
+    { total_margin_in: 0, total_overall_margin: 0, total_revenue: 0, total_nots: 0 }
   );
 
-  const totalStats = clients.reduce((acc, client) => ({
-    total_margin_in: acc.total_margin_in + client.margin_in,
-    total_overall_margin: acc.total_overall_margin + client.overall_margin,
-    total_revenue: acc.total_revenue + client.monthly_revenue,
-    total_nots: acc.total_nots + client.nots_generated
-  }), { total_margin_in: 0, total_overall_margin: 0, total_revenue: 0, total_nots: 0 });
+  const clearFilters = () => {
+    setMinEquity("");
+    setMaxEquity("");
+    setMinRevenue("");
+    setMaxRevenue("");
+  };
+
+  const clearSorting = () => {
+    setSortKey("none");
+    setSortDir("desc");
+  };
 
   return (
     <div className="space-y-6">
@@ -190,29 +284,140 @@ export default function Clients() {
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search clients..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {/* Controls: Search + Filters + Sorting */}
+      <Card className="shadow-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Search, Filter & Sort</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search clients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Min Equity</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 100000"
+                value={minEquity}
+                onChange={(e) => setMinEquity(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Max Equity</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 500000"
+                value={maxEquity}
+                onChange={(e) => setMaxEquity(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Min Revenue</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 10000"
+                value={minRevenue}
+                onChange={(e) => setMinRevenue(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Max Revenue</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 100000"
+                value={maxRevenue}
+                onChange={(e) => setMaxRevenue(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Sorting */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Sort by</label>
+              <Select
+                value={sortKey}
+                onValueChange={(v) => setSortKey(v as SortKey)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="equity">Equity</SelectItem>
+                  <SelectItem value="revenue">Revenue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Direction</label>
+              <Select
+                value={sortDir}
+                onValueChange={(v) => setSortDir(v as SortDir)}
+                disabled={sortKey === "none"}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                  <SelectItem value="desc">Descending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={clearFilters}>
+              Clear Filters
+            </Button>
+            <Button variant="outline" onClick={clearSorting}>
+              Clear Sorting
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Loading / Error states (optional but helpful) */}
+      {loading && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading clients...
+        </div>
+      )}
+      {error && (
+        <div className="text-destructive text-sm">
+          Failed to load clients. Please refresh.
+        </div>
+      )}
 
       {/* Clients List */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredClients.map((client) => (
+        {visibleClients.map((client) => (
           <Card key={client.id} className="shadow-card hover:shadow-elegant transition-shadow">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <CardTitle className="text-lg">{client.name}</CardTitle>
                 <div className="flex gap-1">
-                  <ClientForm 
-                    onSubmit={(data) => handleUpdateClient(client.id, data)} 
-                    client={client} 
-                    isEditing 
+                  <ClientForm
+                    onSubmit={(data) => handleUpdateClient(client.id, data)}
+                    client={client}
+                    isEditing
                   />
                   {isAdmin && (
                     <AlertDialog>
@@ -240,7 +445,7 @@ export default function Clients() {
                 </div>
               </div>
               <Badge variant="secondary" className="w-fit">
-                {client.nots_generated.toFixed(2)} NOTs
+                {Number(client.nots_generated ?? 0).toFixed(2)} NOTs
               </Badge>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -248,17 +453,17 @@ export default function Clients() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Current Equity:</span>
                   <span className="font-medium text-trading-profit">
-                    {formatCurrency(client.overall_margin)}
+                    {formatCurrency(client.overall_margin ?? 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Monthly Revenue:</span>
                   <span className="font-medium">
-                    {formatCurrency(client.monthly_revenue)}
+                    {formatCurrency(client.monthly_revenue ?? 0)}
                   </span>
                 </div>
               </div>
-              
+
               {/* Transaction Actions */}
               <div className="pt-3 border-t border-border">
                 <div className="flex gap-2">
@@ -296,13 +501,13 @@ export default function Clients() {
         ))}
       </div>
 
-      {filteredClients.length === 0 && (
+      {visibleClients.length === 0 && !loading && (
         <Card className="shadow-card">
           <CardContent className="text-center py-8">
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No clients found</h3>
             <p className="text-muted-foreground">
-              {searchTerm ? "Try adjusting your search criteria" : "Add your first client to get started"}
+              {searchTerm ? "Try adjusting your search or filters" : "Add your first client to get started"}
             </p>
           </CardContent>
         </Card>

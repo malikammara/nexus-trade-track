@@ -129,25 +129,6 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
               )}
             />
             
-            <FormField
-              control={form.control}
-              name="margin_in"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Margin In</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             
             <FormField
               control={form.control}
@@ -162,65 +143,6 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
                       placeholder="0.00"
                       {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="invested_amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Invested Amount</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="monthly_revenue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Monthly Revenue</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="nots_generated"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>NOTs Generated</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number"
-                      placeholder="0"
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                     />
                   </FormControl>
                   <FormMessage />

@@ -3,13 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Target, 
+import {
+  Target,
   Calculator,
   DollarSign,
   Search,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
@@ -19,43 +19,43 @@ import { supabase } from "@/lib/supabase";
 
 const NOT_DENOMINATOR = 6000;
 
-// --- Initial margin (PKR) per *unit* ---
-const MARGIN_PER_OZ_GOLD = 25_000;          // per oz
-const MARGIN_PER_NASDAQ = 219_500;          // per single Nasdaq contract
-const MARGIN_PER_BBL_CRUDE = 850;           // per barrel
+// Initial margin (PKR) per *unit*
+const MARGIN_PER_OZ_GOLD = 25_000;           // per oz
+const MARGIN_PER_NASDAQ = 219_500;           // per NASDAQ contract
+const MARGIN_PER_BBL_CRUDE = 850;            // per barrel
 const MARGIN_PER_CRUDE_100 = MARGIN_PER_BBL_CRUDE * 100; // 85,000 per 100 bbl
 
-// Keep some spare margin (e.g., 20%) unallocated
+// Keep some spare margin unallocated
 const SPARE_MARGIN_BUFFER = 0.20;
 
-// Equity threshold for allowing Gold 100oz
-const GOLD_100OZ_MIN_EQUITY = 1_000_000;  // PKR
+// Equity threshold for Gold 100oz
+const GOLD_100OZ_MIN_EQUITY = 5_000_000;     // PKR
 
-type ProductSlice = {
+type Slice = {
   product: Product;
   units: number;
-  roundTripCommissionPerUnitPKR: number;
-  commissionTotalPKR: number;
+  rtCommissionPerUnit: number;   // PKR (round-trip)
+  commissionTotal: number;       // PKR
   nots: number;
-  marginPerUnit: number;
-  marginTotal: number;
+  marginPerUnit: number;         // PKR
+  marginTotal: number;           // PKR
 };
 
-type DiversifiedOption = {
+type OptionPlan = {
   label: string;
-  slices: ProductSlice[];
-  totalCommissionPKR: number;
+  slices: Slice[];
+  totalCommission: number;       // PKR
   totalNOTs: number;
-  fit: "perfect" | "good" | "adjust";
+  totalMargin: number;           // PKR
   deltaNOTs: number;
-  totalMarginRequired: number;
+  fit: "perfect" | "good" | "adjust";
 };
 
-interface ClientDiversifiedAnalysis {
+interface ClientPlan {
   client: Client;
   dailyTargetNOTs: number;
-  requiredCommissionPKR: number;
-  options: DiversifiedOption[];
+  requiredCommission: number;    // PKR
+  options: OptionPlan[];
 }
 
 export default function TradeSuggestions() {
@@ -65,77 +65,81 @@ export default function TradeSuggestions() {
   const [usdToPkr, setUsdToPkr] = useState(283);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Pull same API as useDashboard for consistency
-  const [orgDailyTargetNOTs, setOrgDailyTargetNOTs] = useState<number>(0);
-  const [totalEquity, setTotalEquity] = useState<number>(0);
+  // Same API as Dashboard for consistency
+  const [orgDailyTargetNOTs, setOrgDailyTargetNOTs] = useState(0);
+  const [totalEquity, setTotalEquity] = useState(0);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTargets = async () => {
+    const run = async () => {
       try {
         setApiError(null);
         const { data, error } = await supabase.rpc("calculate_equity_based_target");
         if (error) throw error;
         const row = Array.isArray(data) ? data[0] : data;
-        const apiTotalEquity = row?.total_equity ?? 0;
-        const apiDailyPKR = row?.daily_target_nots ?? 0; // PKR/day from backend
-        setTotalEquity(apiTotalEquity);
-        setOrgDailyTargetNOTs(apiDailyPKR / NOT_DENOMINATOR); // convert to NOTs
+        setTotalEquity(row?.total_equity ?? 0);
+        setOrgDailyTargetNOTs((row?.daily_target_nots ?? 0) / NOT_DENOMINATOR);
       } catch (e: any) {
-        setApiError(e?.message || "Failed to fetch daily target");
+        setApiError(e?.message || "Failed to fetch equity-based target");
         setTotalEquity(0);
         setOrgDailyTargetNOTs(0);
       }
     };
-    fetchTargets();
+    run();
   }, []);
 
-  // --- PRODUCT PICKERS (prefer/avoid) ---
-  const productIndex = useMemo(() => {
+  // ---------- Product resolution (robust + explicit avoids) ----------
+  const pick = useMemo(() => {
     const norm = (s: string) => (s || "").toLowerCase();
-    const allowed = products.filter((p) => {
+
+    // Allowed base set
+    const base = products.filter((p) => {
       const n = norm(p.name);
       if (n.includes(" id ")) return false;
       if (n.includes("2nasdaq")) return false;
       if (n.includes("1000") && n.includes("barrel")) return false; // avoid 1000 barrels
-      return (
-        n.includes("gold") ||
-        n.includes("nasdaq") ||
-        n.includes("crude")
-      );
+      return n.includes("gold") || n.includes("nasdaq") || n.includes("xau") || n.includes("crude");
     });
 
-    // Prefer exact variants
-    const gold1 = allowed.find(p => {
-      const n = norm(p.name);
-      return n.includes("gold") && (n.includes("1oz") || n.includes("1 oz") || n.endsWith(" 1oz"));
-    }) || null;
+    // Helpers
+    const isGold = (n: string) => n.includes("gold") || n.includes("xau");
+    const has = (n: string, str: string) => n.includes(str);
 
-    const gold10 = allowed.find(p => {
-      const n = norm(p.name);
-      return n.includes("gold") && (n.includes("10oz") || n.includes("10 oz"));
-    }) || null;
+    const gold1 =
+      base.find((p) => {
+        const n = norm(p.name);
+        return isGold(n) && (has(n, "1oz") || has(n, "1 oz") || has(n, "-1") || has(n, " mini"));
+      }) || null;
 
-    const gold100 = allowed.find(p => {
-      const n = norm(p.name);
-      return n.includes("gold") && (n.includes("100oz") || n.includes("100 oz"));
-    }) || null;
+    const gold10 =
+      base.find((p) => {
+        const n = norm(p.name);
+        return isGold(n) && (has(n, "10oz") || has(n, "10 oz") || has(n, "-10"));
+      }) || null;
 
-    const nasdaq = allowed.find(p => {
-      const n = norm(p.name);
-      // plain "nasdaq" (avoid 2nasdaq already filtered)
-      return n.includes("nasdaq");
-    }) || null;
+    const gold100 =
+      base.find((p) => {
+        const n = norm(p.name);
+        return isGold(n) && (has(n, "100oz") || has(n, "100 oz") || has(n, "-100"));
+      }) || null;
 
-    const crude100 = allowed.find(p => {
-      const n = norm(p.name);
-      // prefer "100 barrels" / "100 bbl"
-      return n.includes("crude") && (n.includes("100 barrel") || n.includes("100 bbl") || n.includes("100brl") || n.includes("100brl"));
-    }) || null;
+    const nasdaq =
+      base.find((p) => {
+        const n = norm(p.name);
+        // keep plain nasdaq (2nasdaq already filtered)
+        return n.includes("nasdaq");
+      }) || null;
+
+    const crude100 =
+      base.find((p) => {
+        const n = norm(p.name);
+        return n.includes("crude") && (n.includes("100 barrel") || n.includes("100 bbl") || n.includes("100brl") || n.includes("100 brl"));
+      }) || null;
 
     return { gold1, gold10, gold100, nasdaq, crude100 };
   }, [products]);
 
+  // ---------- utils ----------
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PK", {
       style: "currency",
@@ -144,8 +148,16 @@ export default function TradeSuggestions() {
       maximumFractionDigits: 0,
     }).format(amount ?? 0);
 
-  const formatDecimal = (value: number, decimals: number = 2) =>
+  const formatDecimal = (value: number, decimals = 2) =>
     Number(value ?? 0).toFixed(decimals);
+
+  const instrumentEmoji = (name: string) => {
+    const n = (name || "").toLowerCase();
+    if (n.includes("gold") || n.includes("xau")) return "🥇";
+    if (n.includes("crude")) return "🛢️";
+    if (n.includes("nasdaq")) return "📈";
+    return "📊";
+  };
 
   const fitBadge = (ratioPct: number): "perfect" | "good" | "adjust" => {
     if (ratioPct >= 95 && ratioPct <= 105) return "perfect";
@@ -153,193 +165,323 @@ export default function TradeSuggestions() {
     return "adjust";
   };
 
-  // Commission (PKR) per unit (ROUND TRIP) + margin per unit (PKR) by product
-  const metricsForProduct = (p: Product) => {
-    const name = (p.name || "").toLowerCase();
-    const roundTripCommissionPerUnitPKR = (p.commission_usd || 0) * usdToPkr * 2;
+  // Commission/margin per unit for a product (round trip commission!)
+  const perUnitMetrics = (p: Product) => {
+    const n = (p.name || "").toLowerCase();
+    const rtCommissionPerUnit = (p.commission_usd || 0) * usdToPkr * 2;
+
     let marginPerUnit = 0;
-
-    if (name.includes("gold") && (name.includes("1oz") || name.includes("1 oz"))) {
+    if ((n.includes("gold") || n.includes("xau")) && (n.includes("1oz") || n.includes("1 oz") || n.includes("-1") || n.includes(" mini")))
       marginPerUnit = MARGIN_PER_OZ_GOLD * 1;
-    } else if (name.includes("gold") && (name.includes("10oz") || name.includes("10 oz"))) {
+    else if ((n.includes("gold") || n.includes("xau")) && (n.includes("10oz") || n.includes("10 oz") || n.includes("-10")))
       marginPerUnit = MARGIN_PER_OZ_GOLD * 10;
-    } else if (name.includes("gold") && (name.includes("100oz") || name.includes("100 oz"))) {
+    else if ((n.includes("gold") || n.includes("xau")) && (n.includes("100oz") || n.includes("100 oz") || n.includes("-100")))
       marginPerUnit = MARGIN_PER_OZ_GOLD * 100;
-    } else if (name.includes("nasdaq")) {
+    else if (n.includes("nasdaq"))
       marginPerUnit = MARGIN_PER_NASDAQ;
-    } else if (name.includes("crude") && (name.includes("100 barrel") || name.includes("100 bbl") || name.includes("100brl"))) {
+    else if (n.includes("crude") && (n.includes("100 barrel") || n.includes("100 bbl") || n.includes("100brl") || n.includes("100 brl")))
       marginPerUnit = MARGIN_PER_CRUDE_100;
-    } else if (name.includes("crude")) {
-      // fallback: if some other crude unit, try to parse barrels; otherwise assume 100
-      marginPerUnit = MARGIN_PER_CRUDE_100;
-    }
+    else if (n.includes("crude"))
+      marginPerUnit = MARGIN_PER_CRUDE_100; // fallback
 
-    return { roundTripCommissionPerUnitPKR, marginPerUnit };
+    return { rtCommissionPerUnit, marginPerUnit };
   };
 
-  // Rotation-based balanced filler to avoid lopsided counts.
-  // We rotate through a prioritized list of instruments and add 1 unit at a time,
-  // as long as commission and margin constraints make sense.
-  const buildOptionByRotation = (
-    label: string,
-    instruments: Product[],
-    client: Client,
-    dailyTargetNOTs: number
-  ): DiversifiedOption => {
-    const slices: ProductSlice[] = instruments.map((p) => {
-      const { roundTripCommissionPerUnitPKR, marginPerUnit } = metricsForProduct(p);
+  // Compute units for a given quota, bounded by commission and margin budgets
+  function computeUnitsForQuota(
+    p: Product,
+    quotaPKR: number,
+    remainingCommissionPKR: number,
+    remainingMarginPKR: number,
+    equity: number
+  ) {
+    const n = (p.name || "").toLowerCase();
+    // Gold 100oz gating
+    if ((n.includes("gold") || n.includes("xau")) &&
+        (n.includes("100oz") || n.includes("100 oz") || n.includes("-100")) &&
+        equity <= GOLD_100OZ_MIN_EQUITY) {
+      return 0;
+    }
+
+    const { rtCommissionPerUnit, marginPerUnit } = perUnitMetrics(p);
+    if (rtCommissionPerUnit <= 0 || marginPerUnit <= 0) return 0;
+
+    // target by quota
+    const byQuota = Math.ceil(quotaPKR / rtCommissionPerUnit);
+    // hard caps by budgets
+    const byCommission = Math.floor(remainingCommissionPKR / rtCommissionPerUnit);
+    const byMargin = Math.floor(remainingMarginPKR / marginPerUnit);
+
+    const units = Math.max(0, Math.min(byQuota, byCommission, byMargin));
+    return units;
+  }
+
+  function buildSlices(
+    prods: Product[],
+    quotas: number[],                // PKR quota for each product
+    requiredPKR: number,            // total commission needed (PKR)
+    equity: number
+  ): { slices: Slice[]; totalCommission: number; totalMargin: number } {
+    const slices: Slice[] = prods.map((p) => {
+      const { rtCommissionPerUnit, marginPerUnit } = perUnitMetrics(p);
       return {
         product: p,
         units: 0,
-        roundTripCommissionPerUnitPKR,
-        commissionTotalPKR: 0,
+        rtCommissionPerUnit,
+        commissionTotal: 0,
         nots: 0,
         marginPerUnit,
         marginTotal: 0,
       };
     });
 
-    const requiredCommissionPKR = dailyTargetNOTs * NOT_DENOMINATOR;
+    const marginBudget = Math.max(0, equity * (1 - SPARE_MARGIN_BUFFER));
 
-    // Margin budget: equity minus spare buffer
-    const availableMarginBudget = Math.max(0, (client.overall_margin || 0) * (1 - SPARE_MARGIN_BUFFER));
+    // First pass: allocate by quotas
+    let usedCommission = 0;
+    let usedMargin = 0;
 
-    // Greedy rotation loop
-    let totalCommission = 0;
-    let totalMargin = 0;
-    let safety = 0;
-
-    // If no commission info (all zero), bail early
-    if (slices.every(s => s.roundTripCommissionPerUnitPKR <= 0)) {
-      return {
-        label,
-        slices,
-        totalCommissionPKR: 0,
-        totalNOTs: 0,
-        fit: "adjust",
-        deltaNOTs: -dailyTargetNOTs,
-        totalMarginRequired: 0,
-      };
-    }
-
-    while (totalCommission < requiredCommissionPKR && safety < 5000) {
-      for (let i = 0; i < slices.length && totalCommission < requiredCommissionPKR; i++) {
-        const s = slices[i];
-        // Equity guards:
-        // - Disallow gold 100oz if equity <= threshold
-        const nm = (s.product.name || "").toLowerCase();
-        if (nm.includes("gold") && (nm.includes("100oz") || nm.includes("100 oz")) && (client.overall_margin || 0) <= GOLD_100OZ_MIN_EQUITY) {
-          continue; // skip this instrument
-        }
-
-        const nextUnits = s.units + 1;
-        const nextCommissionTotal = s.roundTripCommissionPerUnitPKR * nextUnits;
-        const nextMarginTotal = s.marginPerUnit * nextUnits;
-
-        const newTotalCommission = totalCommission - s.commissionTotalPKR + nextCommissionTotal;
-        const newTotalMargin = totalMargin - s.marginTotal + nextMarginTotal;
-
-        // Margin constraint
-        if (newTotalMargin > availableMarginBudget) {
-          continue; // skip adding this unit; margin would exceed
-        }
-
-        // Accept this unit
-        s.units = nextUnits;
-        s.commissionTotalPKR = nextCommissionTotal;
-        s.marginTotal = nextMarginTotal;
-
-        totalCommission = newTotalCommission;
-        totalMargin = newTotalMargin;
-
-        // Small early break to re-check while condition
-        if (totalCommission >= requiredCommissionPKR) break;
+    for (let i = 0; i < prods.length; i++) {
+      const p = prods[i];
+      const quota = quotas[i];
+      const units = computeUnitsForQuota(
+        p,
+        quota,
+        requiredPKR - usedCommission,
+        marginBudget - usedMargin,
+        equity
+      );
+      if (units > 0) {
+        slices[i].units = units;
+        slices[i].commissionTotal = units * slices[i].rtCommissionPerUnit;
+        slices[i].marginTotal = units * slices[i].marginPerUnit;
+        usedCommission += slices[i].commissionTotal;
+        usedMargin += slices[i].marginTotal;
       }
+    }
+
+    // Second pass: if still short, top up by cheapest-commission product first,
+    // but respect margin and Gold100 gating.
+    let safety = 0;
+    while (usedCommission < requiredPKR && safety < 2000) {
+      // Choose product with lowest rtCommissionPerUnit (cost-effective)
+      const idx = slices
+        .map((s, i) => ({ i, c: s.rtCommissionPerUnit }))
+        .sort((a, b) => a.c - b.c)
+        .find(({ i }) => {
+          const s = slices[i];
+          const name = (s.product.name || "").toLowerCase();
+          if ((name.includes("gold") || name.includes("xau")) &&
+              (name.includes("100oz") || name.includes("100 oz") || name.includes("-100")) &&
+              equity <= GOLD_100OZ_MIN_EQUITY) {
+            return false;
+          }
+          return usedMargin + s.marginPerUnit <= marginBudget &&
+                 usedCommission + s.rtCommissionPerUnit <= requiredPKR * 1.05; // allow tiny overshoot
+        });
+
+      if (!idx) break;
+
+      const s = slices[idx.i];
+      s.units += 1;
+      s.commissionTotal += s.rtCommissionPerUnit;
+      s.marginTotal += s.marginPerUnit;
+      usedCommission += s.rtCommissionPerUnit;
+      usedMargin += s.marginPerUnit;
       safety++;
-      if (safety > 4999) break; // hard cap
-      // If a full pass adds nothing (stuck due to margin), break
-      if (slices.every(sl => sl.units === 0) && safety > 2) break;
     }
 
-    // Compute totals / NOTs and apply fit logic
-    let totalNOTs = 0;
-    for (const s of slices) {
-      s.nots = s.commissionTotalPKR / NOT_DENOMINATOR;
-      totalNOTs += s.nots;
-    }
+    return { slices, totalCommission: usedCommission, totalMargin: usedMargin };
+  }
 
-    const ratioPct = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
-    const fit = fitBadge(ratioPct);
-    const deltaNOTs = totalNOTs - dailyTargetNOTs;
-
-    return {
-      label,
-      slices,
-      totalCommissionPKR: totalCommission,
-      totalNOTs,
-      fit,
-      deltaNOTs,
-      totalMarginRequired: totalMargin,
-    };
-  };
-
-  const buildOptionsForClient = (client: Client): ClientDiversifiedAnalysis => {
+  function buildOptionsForClient(client: Client): ClientPlan {
     const share = totalEquity > 0 ? (client.overall_margin || 0) / totalEquity : 0;
     const dailyTargetNOTs = orgDailyTargetNOTs * share;
+    const requiredPKR = dailyTargetNOTs * NOT_DENOMINATOR;
 
-    const { gold1, gold10, gold100, nasdaq, crude100 } = productIndex;
+    const { gold1, gold10, gold100, nasdaq, crude100 } = pick;
 
-    // Build prioritized arrays for rotation according to your rules:
+    const options: OptionPlan[] = [];
 
-    // Option A: Gold-first (all Gold 1oz core), then rotate with Crude 100bbl, then Nasdaq
-    const optA: Product[] = [
-      ...(gold1 ? [gold1] : []),
-      ...(crude100 ? [crude100] : []),
-      ...(nasdaq ? [nasdaq] : []),
-    ];
+    // ---------------- Option A: Gold 1oz core, remainder split 50/50 Crude/Nasdaq
+    if (gold1) {
+      const instruments: Product[] = [gold1, ...(crude100 ? [crude100] : []), ...(nasdaq ? [nasdaq] : [])];
+      const weights: number[] = instruments.map((p, i) => (i === 0 ? 1 : 0)); // all to gold1 initially
+      // First pass: try to fill entirely with gold1
+      let quotas = weights.map((w) => requiredPKR * w);
+      let { slices, totalCommission, totalMargin } = buildSlices(instruments, quotas, requiredPKR, client.overall_margin || 0);
 
-    // Option B: Gold 10oz core, then Crude 100bbl, then Nasdaq
-    const optB: Product[] = [
-      ...(gold10 ? [gold10] : []),
-      ...(crude100 ? [crude100] : []),
-      ...(nasdaq ? [nasdaq] : []),
-    ];
+      if (totalCommission < requiredPKR * 0.995 && (crude100 || nasdaq)) {
+        // Split remainder 50/50 into crude/nasdaq
+        const remainder = requiredPKR - totalCommission;
+        const secondProds: Product[] = [];
+        if (crude100) secondProds.push(crude100);
+        if (nasdaq) secondProds.push(nasdaq);
 
-    // Option C: Mixed rotation. If equity > 1M and gold100 exists, include it sparingly at end.
-    const includeGold100 = gold100 && (client.overall_margin || 0) > GOLD_100OZ_MIN_EQUITY;
-    const optC: Product[] = [
-      ...(gold1 ? [gold1] : []),
-      ...(crude100 ? [crude100] : []),
-      ...(nasdaq ? [nasdaq] : []),
-      ...(includeGold100 ? [gold100!] : []),
-    ];
+        const remainderQuotas = secondProds.map(() => remainder / Math.max(secondProds.length, 1));
+        const add = buildSlices(secondProds, remainderQuotas, remainder, (client.overall_margin || 0) - totalMargin);
 
-    const options: DiversifiedOption[] = [];
-    if (optA.length) options.push(buildOptionByRotation("Option A (Gold 1oz focus)", optA, client, dailyTargetNOTs));
-    if (optB.length) options.push(buildOptionByRotation("Option B (Gold 10oz focus)", optB, client, dailyTargetNOTs));
-    if (optC.length) options.push(buildOptionByRotation("Option C (Mixed)", optC, client, dailyTargetNOTs));
+        // Merge add into slices
+        for (const addSlice of add.slices) {
+          const idx = slices.findIndex((s) => s.product.id === addSlice.product.id);
+          if (idx >= 0) {
+            slices[idx].units += addSlice.units;
+            slices[idx].commissionTotal += addSlice.commissionTotal;
+            slices[idx].marginTotal += addSlice.marginTotal;
+          } else {
+            slices.push(addSlice);
+          }
+        }
+        totalCommission += add.totalCommission;
+        totalMargin += add.totalMargin;
+      }
 
-    // Compute required PKR for reference
-    const requiredCommissionPKR = dailyTargetNOTs * NOT_DENOMINATOR;
+      let totalNOTs = 0;
+      for (const s of slices) s.nots = s.commissionTotal / NOT_DENOMINATOR, totalNOTs += s.nots;
 
-    // Finalize slice NOTs (redundant but explicit) and ensure no weird 13/1/1 due to sorting:
-    // rotation inherently balances adds across the list in order.
+      const ratio = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
+      options.push({
+        label: "Option A (Gold 1oz focus)",
+        slices,
+        totalCommission,
+        totalMargin,
+        totalNOTs,
+        deltaNOTs: totalNOTs - dailyTargetNOTs,
+        fit: fitBadge(ratio),
+      });
+    }
+
+    // ---------------- Option B: Gold 10oz core, remainder split 50/50 Crude/Nasdaq
+    if (gold10) {
+      const instruments: Product[] = [gold10, ...(crude100 ? [crude100] : []), ...(nasdaq ? [nasdaq] : [])];
+      const quotas = instruments.map((p, i) => (i === 0 ? requiredPKR : 0)); // all to gold10 initially
+      let { slices, totalCommission, totalMargin } = buildSlices(instruments, quotas, requiredPKR, client.overall_margin || 0);
+
+      if (totalCommission < requiredPKR * 0.995 && (crude100 || nasdaq)) {
+        const remainder = requiredPKR - totalCommission;
+        const secondProds: Product[] = [];
+        if (crude100) secondProds.push(crude100);
+        if (nasdaq) secondProds.push(nasdaq);
+
+        const remainderQuotas = secondProds.map(() => remainder / Math.max(secondProds.length, 1));
+        const add = buildSlices(secondProds, remainderQuotas, remainder, (client.overall_margin || 0) - totalMargin);
+
+        for (const addSlice of add.slices) {
+          const idx = slices.findIndex((s) => s.product.id === addSlice.product.id);
+          if (idx >= 0) {
+            slices[idx].units += addSlice.units;
+            slices[idx].commissionTotal += addSlice.commissionTotal;
+            slices[idx].marginTotal += addSlice.marginTotal;
+          } else {
+            slices.push(addSlice);
+          }
+        }
+        totalCommission += add.totalCommission;
+        totalMargin += add.totalMargin;
+      }
+
+      let totalNOTs = 0;
+      for (const s of slices) s.nots = s.commissionTotal / NOT_DENOMINATOR, totalNOTs += s.nots;
+
+      const ratio = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
+      options.push({
+        label: "Option B (Gold 10oz focus)",
+        slices,
+        totalCommission,
+        totalMargin,
+        totalNOTs,
+        deltaNOTs: totalNOTs - dailyTargetNOTs,
+        fit: fitBadge(ratio),
+      });
+    }
+
+    // ---------------- Option C: Mixed (40% Gold 1oz, 40% Crude 100bbl, 20% Nasdaq).
+    // If equity > 1M AND Gold100 exists AND margin permits, allow up to 1–2 Gold100 as top-up only.
+    {
+      const base: Product[] = [];
+      if (pick.gold1) base.push(pick.gold1);
+      if (pick.crude100) base.push(pick.crude100);
+      if (pick.nasdaq) base.push(pick.nasdaq);
+
+      if (base.length) {
+        const weights: number[] = base.map((p) => {
+          const n = (p.name || "").toLowerCase();
+          if (n.includes("gold") || n.includes("xau")) return 0.40;
+          if (n.includes("crude")) return 0.40;
+          return 0.20; // nasdaq
+        });
+        const sum = weights.reduce((a, b) => a + b, 0) || 1;
+        const quotas = weights.map((w) => (w / sum) * requiredPKR);
+
+        let { slices, totalCommission, totalMargin } = buildSlices(base, quotas, requiredPKR, client.overall_margin || 0);
+
+        // Optional tiny Gold100 top-up
+        if (
+          (client.overall_margin || 0) > GOLD_100OZ_MIN_EQUITY &&
+          pick.gold100
+        ) {
+          const { rtCommissionPerUnit, marginPerUnit } = perUnitMetrics(pick.gold100);
+          let added = 0;
+          while (
+            totalCommission < requiredPKR * 1.02 &&
+            totalMargin + marginPerUnit <= (client.overall_margin || 0) * (1 - SPARE_MARGIN_BUFFER) &&
+            added < 2
+          ) {
+            // add 1 unit each step
+            const idx = slices.findIndex((s) => s.product.id === pick.gold100!.id);
+            if (idx >= 0) {
+              slices[idx].units += 1;
+              slices[idx].commissionTotal += rtCommissionPerUnit;
+              slices[idx].marginTotal += marginPerUnit;
+            } else {
+              slices.push({
+                product: pick.gold100!,
+                units: 1,
+                rtCommissionPerUnit,
+                commissionTotal: rtCommissionPerUnit,
+                marginPerUnit,
+                marginTotal: marginPerUnit,
+                nots: 0,
+              });
+            }
+            totalCommission += rtCommissionPerUnit;
+            totalMargin += marginPerUnit;
+            added++;
+          }
+        }
+
+        let totalNOTs = 0;
+        for (const s of slices) s.nots = s.commissionTotal / NOT_DENOMINATOR, totalNOTs += s.nots;
+
+        const ratio = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
+        options.push({
+          label: "Option C (Mixed)",
+          slices,
+          totalCommission,
+          totalMargin,
+          totalNOTs,
+          deltaNOTs: totalNOTs - dailyTargetNOTs,
+          fit: fitBadge(ratio),
+        });
+      }
+    }
+
     return {
       client,
       dailyTargetNOTs,
-      requiredCommissionPKR,
+      requiredCommission: requiredPKR,
       options,
     };
-  };
+  }
 
-  const clientAnalyses = useMemo(() => {
+  const plans = useMemo(() => {
     const filtered = clients.filter((c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
     return filtered
       .map(buildOptionsForClient)
       .sort((a, b) => (b.client.overall_margin || 0) - (a.client.overall_margin || 0));
-  }, [clients, orgDailyTargetNOTs, totalEquity, productIndex, usdToPkr, searchTerm]);
+  }, [clients, pick, orgDailyTargetNOTs, totalEquity, usdToPkr, searchTerm]);
 
   if (clientsLoading || productsLoading) {
     return (
@@ -358,14 +500,13 @@ export default function TradeSuggestions() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Trade Suggestions</h1>
         <p className="text-muted-foreground">
-          Diversified, margin-aware suggestions to hit each client’s daily NOTs target
+          Diversified, margin-aware mixes that hit each client’s daily NOTs target
         </p>
         {apiError && <p className="text-sm text-red-500">Target API error: {apiError}</p>}
       </div>
 
       {/* Controls */}
       <div className="grid gap-3 md:grid-cols-3">
-        {/* Search */}
         <div className="relative md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -376,7 +517,6 @@ export default function TradeSuggestions() {
           />
         </div>
 
-        {/* USD rate */}
         <div className="flex items-center gap-2">
           <Label htmlFor="usd-rate" className="whitespace-nowrap text-sm">
             USD → PKR
@@ -405,7 +545,7 @@ export default function TradeSuggestions() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{clientAnalyses.length}</div>
+            <div className="text-2xl font-bold">{plans.length}</div>
             <p className="text-xs text-muted-foreground">
               Org Daily Target: {formatDecimal(orgDailyTargetNOTs)} NOTs
             </p>
@@ -420,8 +560,8 @@ export default function TradeSuggestions() {
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
               {formatDecimal(
-                clientAnalyses.reduce((s, a) => s + a.dailyTargetNOTs, 0) /
-                Math.max(clientAnalyses.length, 1)
+                plans.reduce((s, a) => s + a.dailyTargetNOTs, 0) /
+                  Math.max(plans.length, 1)
               )} NOTs
             </div>
           </CardContent>
@@ -434,11 +574,9 @@ export default function TradeSuggestions() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatDecimal(clientAnalyses.reduce((s, a) => s + a.dailyTargetNOTs, 0))} NOTs
+              {formatDecimal(plans.reduce((s, a) => s + a.dailyTargetNOTs, 0))} NOTs
             </div>
-            <p className="text-xs text-muted-foreground">
-              Equals org target if all clients are listed
-            </p>
+            <p className="text-xs text-muted-foreground">Equals org target if all clients listed</p>
           </CardContent>
         </Card>
 
@@ -453,29 +591,28 @@ export default function TradeSuggestions() {
         </Card>
       </div>
 
-      {/* Client diversified options */}
+      {/* Client options */}
       <div className="space-y-6">
-        {clientAnalyses.map((analysis) => (
-          <Card key={analysis.client.id} className="shadow-card">
+        {plans.map((plan) => (
+          <Card key={plan.client.id} className="shadow-card">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl">{analysis.client.name}</CardTitle>
+                  <CardTitle className="text-xl">{plan.client.name}</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Equity: {formatCurrency(analysis.client.overall_margin)} •{" "}
-                    Daily Target: {formatDecimal(analysis.dailyTargetNOTs)} NOTs •{" "}
-                    Required Commission: {formatCurrency(analysis.requiredCommissionPKR)}
+                    Equity: {formatCurrency(plan.client.overall_margin)} • Daily Target:{" "}
+                    {formatDecimal(plan.dailyTargetNOTs)} NOTs • Required Commission:{" "}
+                    {formatCurrency(plan.requiredCommission)}
                   </p>
                 </div>
                 <Badge variant="outline" className="text-lg px-3 py-1">
-                  {formatDecimal(analysis.dailyTargetNOTs)} NOTs/day
+                  {formatDecimal(plan.dailyTargetNOTs)} NOTs/day
                 </Badge>
               </div>
             </CardHeader>
-
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                {analysis.options.map((opt) => (
+                {plan.options.map((opt) => (
                   <Card
                     key={opt.label}
                     className={cn(
@@ -488,24 +625,28 @@ export default function TradeSuggestions() {
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">{opt.label}</CardTitle>
-                        {opt.fit === "perfect" && <CheckCircle className="h-5 w-5 text-trading-profit" />}
-                        {opt.fit === "good" && <AlertCircle className="h-5 w-5 text-warning" />}
+                        {opt.fit === "perfect" && (
+                          <CheckCircle className="h-5 w-5 text-trading-profit" />
+                        )}
+                        {opt.fit === "good" && (
+                          <AlertCircle className="h-5 w-5 text-warning" />
+                        )}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="space-y-2 text-sm">
-                        {opt.slices.map((sl) => (
-                          <div key={sl.product.id} className="flex justify-between">
+                        {opt.slices.map((s) => (
+                          <div key={s.product.id} className="flex justify-between">
                             <span className="text-muted-foreground">
-                              {instrumentEmoji(sl.product.name)} {sl.product.name} — Units
+                              {instrumentEmoji(s.product.name)} {s.product.name} — Units
                             </span>
-                            <span className="font-semibold">{sl.units}</span>
+                            <span className="font-semibold">{s.units}</span>
                           </div>
                         ))}
                         <div className="flex justify-between pt-2 border-t border-border">
                           <span className="text-muted-foreground">Total Commission (RT):</span>
                           <span className="font-medium text-trading-profit">
-                            {formatCurrency(opt.totalCommissionPKR)}
+                            {formatCurrency(opt.totalCommission)}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -516,7 +657,13 @@ export default function TradeSuggestions() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Delta vs Target:</span>
-                          <span className={opt.deltaNOTs >= 0 ? "text-trading-profit font-medium" : "text-trading-loss font-medium"}>
+                          <span
+                            className={
+                              opt.deltaNOTs >= 0
+                                ? "text-trading-profit font-medium"
+                                : "text-trading-loss font-medium"
+                            }
+                          >
                             {opt.deltaNOTs >= 0 ? "+" : ""}
                             {formatDecimal(opt.deltaNOTs)} NOTs
                           </span>
@@ -524,26 +671,9 @@ export default function TradeSuggestions() {
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Margin Required:</span>
                           <span className="font-medium">
-                            {formatCurrency(opt.totalMarginRequired)}
+                            {formatCurrency(opt.totalMargin)}
                           </span>
                         </div>
-                      </div>
-
-                      <div className="pt-2">
-                        <Badge
-                          variant={
-                            opt.fit === "perfect"
-                              ? "default"
-                              : opt.fit === "good"
-                              ? "secondary"
-                              : "outline"
-                          }
-                          className="w-full justify-center"
-                        >
-                          {opt.fit === "perfect" && "🎯 Perfect Match"}
-                          {opt.fit === "good" && "✅ Good Option"}
-                          {opt.fit === "adjust" && "⚠️ Consider Adjustment"}
-                        </Badge>
                       </div>
                     </CardContent>
                   </Card>
@@ -553,29 +683,6 @@ export default function TradeSuggestions() {
           </Card>
         ))}
       </div>
-
-      {clientAnalyses.length === 0 && (
-        <Card className="shadow-card">
-          <CardContent className="text-center py-8">
-            <Calculator className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No clients found</h3>
-            <p className="text-muted-foreground">
-              {searchTerm
-                ? "Try adjusting your search criteria"
-                : "Add clients to see trade recommendations"}
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
-}
-
-// --- UI helpers ---
-function instrumentEmoji(name: string) {
-  const n = (name || "").toLowerCase();
-  if (n.includes("gold")) return "🥇";
-  if (n.includes("crude")) return "🛢️";
-  if (n.includes("nasdaq")) return "📈";
-  return "📊";
 }

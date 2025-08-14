@@ -151,30 +151,37 @@ export default function TradeSuggestions() {
       </div>
 
       {/* Controls */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search clients..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {/* Search */}
+          <div className="relative md:col-span-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search clients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 h-10"
+            />
+          </div>
         
-        <div className="space-y-2">
-          <Label htmlFor="usd-rate">USD to PKR Rate</Label>
-          <Input
-            id="usd-rate"
-            type="number"
-            step="0.01"
-            value={usdToPkr}
-            onChange={(e) => setUsdToPkr(parseFloat(e.target.value) || 278)}
-            className="w-full"
-          />
+          {/* USD rate */}
+          <div className="flex items-center gap-2">
+            <Label htmlFor="usd-rate" className="whitespace-nowrap text-sm">USD → PKR</Label>
+            <div className="relative w-full">
+              <Input
+                id="usd-rate"
+                type="number"
+                step="0.01"
+                value={usdToPkr}
+                onChange={(e) => setUsdToPkr(parseFloat(e.target.value) || 278)}
+                className="pr-10 h-10"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                PKR
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
-
+      
       {/* Summary Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="shadow-card">

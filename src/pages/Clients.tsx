@@ -252,18 +252,6 @@ export default function Clients() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Initial Margin:</span>
-                  <span className="font-medium">
-                    {formatCurrency(client.margin_in)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Invested:</span>
-                  <span className="font-medium">
-                    {formatCurrency(client.invested_amount)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-muted-foreground">Monthly Revenue:</span>
                   <span className="font-medium">
                     {formatCurrency(client.monthly_revenue)}

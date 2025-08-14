@@ -11,6 +11,9 @@ import {
   Search,
   Loader2,
   Trash2,
+  Filter as FilterIcon,
+  ArrowUpDown,
+  RotateCcw,
 } from "lucide-react";
 import { Client } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +33,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -59,6 +70,10 @@ export default function Clients() {
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>("none");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Popups
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PK", {
@@ -147,13 +162,15 @@ export default function Clients() {
     }
   };
 
-  // Helpers for safe numeric parsing
-  const num = (v: string) => {
+  // --- FIX: treat empty inputs as "no bound" (not 0) ---
+  const num = (v?: string) => {
+    if (v === undefined || v === null) return undefined;
+    if (String(v).trim() === "") return undefined;
     const n = Number(v);
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // Derived: filtered + searched + sorted
+  // Derived list: search + filter + sort
   const visibleClients = useMemo(() => {
     const minEq = num(minEquity);
     const maxEq = num(maxEquity);
@@ -162,7 +179,7 @@ export default function Clients() {
 
     let list = [...clients];
 
-    // Search (works with/without filters)
+    // Search
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       list = list.filter((c) => c.name.toLowerCase().includes(q));
@@ -170,8 +187,8 @@ export default function Clients() {
 
     // Filters
     list = list.filter((c) => {
-      const equity = c.overall_margin ?? 0; // Equity
-      const revenue = c.monthly_revenue ?? 0; // Revenue generated
+      const equity = c.overall_margin ?? 0;
+      const revenue = c.monthly_revenue ?? 0;
       if (minEq !== undefined && equity < minEq) return false;
       if (maxEq !== undefined && equity > maxEq) return false;
       if (minRev !== undefined && revenue < minRev) return false;
@@ -190,16 +207,7 @@ export default function Clients() {
     }
 
     return list;
-  }, [
-    clients,
-    searchTerm,
-    minEquity,
-    maxEquity,
-    minRevenue,
-    maxRevenue,
-    sortKey,
-    sortDir,
-  ]);
+  }, [clients, searchTerm, minEquity, maxEquity, minRevenue, maxRevenue, sortKey, sortDir]);
 
   const totalStats = clients.reduce(
     (acc, client) => ({
@@ -229,11 +237,10 @@ export default function Clients() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Client Management</h1>
-          <p className="text-muted-foreground">
+        <p className="text-muted-foreground">
             Manage client information and track their trading performance
           </p>
         </div>
-
         <ClientForm onSubmit={handleAddClient} />
       </div>
 
@@ -284,116 +291,157 @@ export default function Clients() {
         </Card>
       </div>
 
-      {/* Controls: Search + Filters + Sorting */}
-      <Card className="shadow-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Search, Filter & Sort</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search clients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      {/* Controls row: search + icon popups */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {/* Search */}
+        <div className="relative w-full md:max-w-md">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search clients..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-          {/* Filters */}
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Min Equity</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 100000"
-                value={minEquity}
-                onChange={(e) => setMinEquity(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Max Equity</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 500000"
-                value={maxEquity}
-                onChange={(e) => setMaxEquity(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Min Revenue</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 10000"
-                value={minRevenue}
-                onChange={(e) => setMinRevenue(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Max Revenue</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 100000"
-                value={maxRevenue}
-                onChange={(e) => setMaxRevenue(e.target.value)}
-              />
-            </div>
-          </div>
+        {/* Icons */}
+        <div className="flex items-center gap-2">
+          {/* Filter popup */}
+          <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Filters">
+                <FilterIcon className="h-4 w-4 mr-2" />
+                Filters
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Filter Clients</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Min Equity</label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="e.g. 100000"
+                    value={minEquity}
+                    onChange={(e) => setMinEquity(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Max Equity</label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="e.g. 500000"
+                    value={maxEquity}
+                    onChange={(e) => setMaxEquity(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Min Revenue</label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="e.g. 10000"
+                    value={minRevenue}
+                    onChange={(e) => setMinRevenue(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Max Revenue</label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="e.g. 100000"
+                    value={maxRevenue}
+                    onChange={(e) => setMaxRevenue(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    clearFilters();
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset Filters
+                </Button>
+                <Button type="button" onClick={() => setFilterOpen(false)}>
+                  Apply
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-          {/* Sorting */}
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Sort by</label>
-              <Select
-                value={sortKey}
-                onValueChange={(v) => setSortKey(v as SortKey)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="equity">Equity</SelectItem>
-                  <SelectItem value="revenue">Revenue</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">Direction</label>
-              <Select
-                value={sortDir}
-                onValueChange={(v) => setSortDir(v as SortDir)}
-                disabled={sortKey === "none"}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Direction" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                  <SelectItem value="desc">Descending</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {/* Sort popup */}
+          <Dialog open={sortOpen} onOpenChange={setSortOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Sort">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                Sort
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[420px]">
+              <DialogHeader>
+                <DialogTitle>Sort Clients</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3">
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Sort by</label>
+                  <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="equity">Equity</SelectItem>
+                      <SelectItem value="revenue">Revenue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Direction</label>
+                  <Select
+                    value={sortDir}
+                    onValueChange={(v) => setSortDir(v as SortDir)}
+                    disabled={sortKey === "none"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Direction" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asc">Ascending</SelectItem>
+                      <SelectItem value="desc">Descending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    clearSorting();
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset Sorting
+                </Button>
+                <Button type="button" onClick={() => setSortOpen(false)}>
+                  Apply
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={clearFilters}>
-              Clear Filters
-            </Button>
-            <Button variant="outline" onClick={clearSorting}>
-              Clear Sorting
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Loading / Error states (optional but helpful) */}
+      {/* Loading / Error */}
       {loading && (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -401,9 +449,7 @@ export default function Clients() {
         </div>
       )}
       {error && (
-        <div className="text-destructive text-sm">
-          Failed to load clients. Please refresh.
-        </div>
+        <div className="text-destructive text-sm">Failed to load clients. Please refresh.</div>
       )}
 
       {/* Clients List */}
@@ -445,7 +491,7 @@ export default function Clients() {
                 </div>
               </div>
               <Badge variant="secondary" className="w-fit">
-                {Number(client.nots_generated ?? 0).toFixed(2)} NOTs
+                {(client.nots_generated ?? 0).toFixed(2)} NOTs
               </Badge>
             </CardHeader>
             <CardContent className="space-y-3">

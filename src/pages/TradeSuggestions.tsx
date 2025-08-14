@@ -16,6 +16,7 @@ import {
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { Client, Product } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface TradeRecommendation {
   product: Product;

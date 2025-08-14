@@ -36,7 +36,7 @@ interface ClientTradeAnalysis {
 export default function TradeSuggestions() {
   const { clients, loading: clientsLoading } = useClients();
   const { products, loading: productsLoading } = useProducts();
-  const [usdToPkr, setUsdToPkr] = useState(278); // Default USD to PKR rate
+  const [usdToPkr, setUsdToPkr] = useState(283); // Default USD to PKR rate
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filter for the three specific products
@@ -172,7 +172,7 @@ export default function TradeSuggestions() {
                 type="number"
                 step="0.01"
                 value={usdToPkr}
-                onChange={(e) => setUsdToPkr(parseFloat(e.target.value) || 278)}
+                onChange={(e) => setUsdToPkr(parseFloat(e.target.value) || 283)}
                 className="pr-10 h-10"
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">

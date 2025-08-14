@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  TrendingUp,
-  Target,
+import { 
+  Target, 
   Calculator,
   DollarSign,
   Search,
@@ -21,27 +19,42 @@ import { supabase } from "@/lib/supabase";
 
 const NOT_DENOMINATOR = 6000;
 
+// --- Initial margin (PKR) per *unit* ---
+const MARGIN_PER_OZ_GOLD = 25_000;          // per oz
+const MARGIN_PER_NASDAQ = 219_500;          // per single Nasdaq contract
+const MARGIN_PER_BBL_CRUDE = 850;           // per barrel
+const MARGIN_PER_CRUDE_100 = MARGIN_PER_BBL_CRUDE * 100; // 85,000 per 100 bbl
+
+// Keep some spare margin (e.g., 20%) unallocated
+const SPARE_MARGIN_BUFFER = 0.20;
+
+// Equity threshold for allowing Gold 100oz
+const GOLD_100OZ_MIN_EQUITY = 1_000_000;  // PKR
+
 type ProductSlice = {
   product: Product;
   units: number;
-  commissionPerUnit: number; // PKR
-  commissionTotal: number;   // PKR
+  roundTripCommissionPerUnitPKR: number;
+  commissionTotalPKR: number;
   nots: number;
+  marginPerUnit: number;
+  marginTotal: number;
 };
 
 type DiversifiedOption = {
   label: string;
   slices: ProductSlice[];
-  totalCommission: number;   // PKR
+  totalCommissionPKR: number;
   totalNOTs: number;
   fit: "perfect" | "good" | "adjust";
-  deltaNOTs: number;         // totalNOTs - targetNOTs
+  deltaNOTs: number;
+  totalMarginRequired: number;
 };
 
 interface ClientDiversifiedAnalysis {
   client: Client;
   dailyTargetNOTs: number;
-  requiredCommission: number; // PKR
+  requiredCommissionPKR: number;
   options: DiversifiedOption[];
 }
 
@@ -52,7 +65,7 @@ export default function TradeSuggestions() {
   const [usdToPkr, setUsdToPkr] = useState(283);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Same API as useDashboard for consistency
+  // Pull same API as useDashboard for consistency
   const [orgDailyTargetNOTs, setOrgDailyTargetNOTs] = useState<number>(0);
   const [totalEquity, setTotalEquity] = useState<number>(0);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -65,9 +78,9 @@ export default function TradeSuggestions() {
         if (error) throw error;
         const row = Array.isArray(data) ? data[0] : data;
         const apiTotalEquity = row?.total_equity ?? 0;
-        const apiDailyPKR = row?.daily_target_nots ?? 0; // backend returns PKR/day
+        const apiDailyPKR = row?.daily_target_nots ?? 0; // PKR/day from backend
         setTotalEquity(apiTotalEquity);
-        setOrgDailyTargetNOTs(apiDailyPKR / NOT_DENOMINATOR);
+        setOrgDailyTargetNOTs(apiDailyPKR / NOT_DENOMINATOR); // convert to NOTs
       } catch (e: any) {
         setApiError(e?.message || "Failed to fetch daily target");
         setTotalEquity(0);
@@ -77,25 +90,51 @@ export default function TradeSuggestions() {
     fetchTargets();
   }, []);
 
-  // Filter to core instruments: crude, gold, nasdaq; exclude " id " and "2nasdaq"
-  const targetProducts = useMemo(() => {
-    return products.filter((p) => {
-      const n = (p.name || "").toLowerCase();
-      const isCore = n.includes("crude") || n.includes("gold") || n.includes("nasdaq");
-      const excluded = n.includes(" id ") || n === "2nasdaq";
-      return isCore && !excluded;
+  // --- PRODUCT PICKERS (prefer/avoid) ---
+  const productIndex = useMemo(() => {
+    const norm = (s: string) => (s || "").toLowerCase();
+    const allowed = products.filter((p) => {
+      const n = norm(p.name);
+      if (n.includes(" id ")) return false;
+      if (n.includes("2nasdaq")) return false;
+      if (n.includes("1000") && n.includes("barrel")) return false; // avoid 1000 barrels
+      return (
+        n.includes("gold") ||
+        n.includes("nasdaq") ||
+        n.includes("crude")
+      );
     });
-  }, [products]);
 
-  const pickCore = useMemo(() => {
-    const pick = (keyword: string) =>
-      targetProducts.find((p) => (p.name || "").toLowerCase().includes(keyword));
-    const nasdaq = pick("nasdaq") || null;
-    const gold = pick("gold") || null;
-    const crude = pick("crude") || null;
-    // Only keep non-null
-    return [nasdaq, gold, crude].filter(Boolean) as Product[];
-  }, [targetProducts]);
+    // Prefer exact variants
+    const gold1 = allowed.find(p => {
+      const n = norm(p.name);
+      return n.includes("gold") && (n.includes("1oz") || n.includes("1 oz") || n.endsWith(" 1oz"));
+    }) || null;
+
+    const gold10 = allowed.find(p => {
+      const n = norm(p.name);
+      return n.includes("gold") && (n.includes("10oz") || n.includes("10 oz"));
+    }) || null;
+
+    const gold100 = allowed.find(p => {
+      const n = norm(p.name);
+      return n.includes("gold") && (n.includes("100oz") || n.includes("100 oz"));
+    }) || null;
+
+    const nasdaq = allowed.find(p => {
+      const n = norm(p.name);
+      // plain "nasdaq" (avoid 2nasdaq already filtered)
+      return n.includes("nasdaq");
+    }) || null;
+
+    const crude100 = allowed.find(p => {
+      const n = norm(p.name);
+      // prefer "100 barrels" / "100 bbl"
+      return n.includes("crude") && (n.includes("100 barrel") || n.includes("100 bbl") || n.includes("100brl") || n.includes("100brl"));
+    }) || null;
+
+    return { gold1, gold10, gold100, nasdaq, crude100 };
+  }, [products]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PK", {
@@ -108,105 +147,187 @@ export default function TradeSuggestions() {
   const formatDecimal = (value: number, decimals: number = 2) =>
     Number(value ?? 0).toFixed(decimals);
 
-  // --- Helpers ---
-  const getProductIcon = (productName: string) => {
-    const n = productName.toLowerCase();
-    if (n.includes("crude")) return "🛢️";
-    if (n.includes("gold")) return "🥇";
-    if (n.includes("nasdaq")) return "📈";
-    return "📊";
-  };
-
   const fitBadge = (ratioPct: number): "perfect" | "good" | "adjust" => {
     if (ratioPct >= 95 && ratioPct <= 105) return "perfect";
-    if (ratioPct >= 80 && ratioPct <= 120) return "good";
+    if (ratioPct >= 85 && ratioPct <= 120) return "good";
     return "adjust";
   };
 
-  // Build 3 diversified portfolios: A (50/30/20 N/G/C), B (40/40/20 G/N/C), C (equal)
-  const allocationSets = useMemo(() => {
-    // Default weights for Nasdaq, Gold, Crude (in that order)
-    const A = { label: "Option A", weights: { nasdaq: 0.5, gold: 0.3, crude: 0.2 } };
-    const B = { label: "Option B", weights: { nasdaq: 0.4, gold: 0.4, crude: 0.2 } };
-    const C = { label: "Option C", weights: { nasdaq: 1/3, gold: 1/3, crude: 1/3 } };
-    return [A, B, C];
-  }, []);
+  // Commission (PKR) per unit (ROUND TRIP) + margin per unit (PKR) by product
+  const metricsForProduct = (p: Product) => {
+    const name = (p.name || "").toLowerCase();
+    const roundTripCommissionPerUnitPKR = (p.commission_usd || 0) * usdToPkr * 2;
+    let marginPerUnit = 0;
 
-  // Normalize/renormalize weights over AVAILABLE instruments for an option
-  const getWeightsForAvailable = (option: typeof allocationSets[number], available: Product[]) => {
-    const mapKey = (p: Product) => {
-      const n = p.name.toLowerCase();
-      if (n.includes("nasdaq")) return "nasdaq" as const;
-      if (n.includes("gold")) return "gold" as const;
-      if (n.includes("crude")) return "crude" as const;
-      return "other" as const;
-    };
+    if (name.includes("gold") && (name.includes("1oz") || name.includes("1 oz"))) {
+      marginPerUnit = MARGIN_PER_OZ_GOLD * 1;
+    } else if (name.includes("gold") && (name.includes("10oz") || name.includes("10 oz"))) {
+      marginPerUnit = MARGIN_PER_OZ_GOLD * 10;
+    } else if (name.includes("gold") && (name.includes("100oz") || name.includes("100 oz"))) {
+      marginPerUnit = MARGIN_PER_OZ_GOLD * 100;
+    } else if (name.includes("nasdaq")) {
+      marginPerUnit = MARGIN_PER_NASDAQ;
+    } else if (name.includes("crude") && (name.includes("100 barrel") || name.includes("100 bbl") || name.includes("100brl"))) {
+      marginPerUnit = MARGIN_PER_CRUDE_100;
+    } else if (name.includes("crude")) {
+      // fallback: if some other crude unit, try to parse barrels; otherwise assume 100
+      marginPerUnit = MARGIN_PER_CRUDE_100;
+    }
 
-    const weightsRaw = available.map((p) => option.weights[mapKey(p)] ?? 0);
-    const sum = weightsRaw.reduce((s, w) => s + w, 0);
-    // If none matched (edge), split equally
-    const normalized = sum > 0 ? weightsRaw.map((w) => w / sum) : available.map(() => 1 / Math.max(available.length, 1));
-    return normalized; // array aligned to `available`
+    return { roundTripCommissionPerUnitPKR, marginPerUnit };
   };
 
-  // Build diversified options for a client based on equity share and API daily target
-  const buildOptionsForClient = (client: Client): ClientDiversifiedAnalysis => {
-    const share = totalEquity > 0 ? (client.overall_margin || 0) / totalEquity : 0;
-    const dailyTargetNOTs = orgDailyTargetNOTs * share;
-    const requiredPKR = dailyTargetNOTs * NOT_DENOMINATOR;
-
-    const available = pickCore;
-    // If we somehow don't have any target products, return empty options
-    if (available.length === 0) {
+  // Rotation-based balanced filler to avoid lopsided counts.
+  // We rotate through a prioritized list of instruments and add 1 unit at a time,
+  // as long as commission and margin constraints make sense.
+  const buildOptionByRotation = (
+    label: string,
+    instruments: Product[],
+    client: Client,
+    dailyTargetNOTs: number
+  ): DiversifiedOption => {
+    const slices: ProductSlice[] = instruments.map((p) => {
+      const { roundTripCommissionPerUnitPKR, marginPerUnit } = metricsForProduct(p);
       return {
-        client,
-        dailyTargetNOTs,
-        requiredCommission: requiredPKR,
-        options: [],
+        product: p,
+        units: 0,
+        roundTripCommissionPerUnitPKR,
+        commissionTotalPKR: 0,
+        nots: 0,
+        marginPerUnit,
+        marginTotal: 0,
+      };
+    });
+
+    const requiredCommissionPKR = dailyTargetNOTs * NOT_DENOMINATOR;
+
+    // Margin budget: equity minus spare buffer
+    const availableMarginBudget = Math.max(0, (client.overall_margin || 0) * (1 - SPARE_MARGIN_BUFFER));
+
+    // Greedy rotation loop
+    let totalCommission = 0;
+    let totalMargin = 0;
+    let safety = 0;
+
+    // If no commission info (all zero), bail early
+    if (slices.every(s => s.roundTripCommissionPerUnitPKR <= 0)) {
+      return {
+        label,
+        slices,
+        totalCommissionPKR: 0,
+        totalNOTs: 0,
+        fit: "adjust",
+        deltaNOTs: -dailyTargetNOTs,
+        totalMarginRequired: 0,
       };
     }
 
-    const options: DiversifiedOption[] = allocationSets.map((opt) => {
-      const weights = getWeightsForAvailable(opt, available); // aligned to `available`
-      // First pass: per product target PKR and ceil to units
-      let slices: ProductSlice[] = available.map((product, idx) => {
-        const commissionPerUnit = (product.commission_usd || 0) * usdToPkr;
-        const targetPKR = requiredPKR * weights[idx];
-        const units = commissionPerUnit > 0 ? Math.ceil(targetPKR / commissionPerUnit) : 0;
-        const commissionTotal = units * commissionPerUnit;
-        const nots = commissionTotal / NOT_DENOMINATOR;
-        return { product, units, commissionPerUnit, commissionTotal, nots };
-      });
-
-      // Check shortfall; if under required, add units greedily to product with highest commissionPerUnit
-      let sumPKR = slices.reduce((s, sl) => s + sl.commissionTotal, 0);
-      if (sumPKR < requiredPKR) {
-        // sort indexes by descending commissionPerUnit
-        const order = [...slices.keys()].sort((a, b) => slices[b].commissionPerUnit - slices[a].commissionPerUnit);
-        let i = 0;
-        while (sumPKR < requiredPKR && i < 1000) { // safety cap
-          const idx = order[i % order.length];
-          slices[idx].units += 1;
-          slices[idx].commissionTotal = slices[idx].units * slices[idx].commissionPerUnit;
-          slices[idx].nots = slices[idx].commissionTotal / NOT_DENOMINATOR;
-          sumPKR = slices.reduce((s, sl) => s + sl.commissionTotal, 0);
-          i++;
+    while (totalCommission < requiredCommissionPKR && safety < 5000) {
+      for (let i = 0; i < slices.length && totalCommission < requiredCommissionPKR; i++) {
+        const s = slices[i];
+        // Equity guards:
+        // - Disallow gold 100oz if equity <= threshold
+        const nm = (s.product.name || "").toLowerCase();
+        if (nm.includes("gold") && (nm.includes("100oz") || nm.includes("100 oz")) && (client.overall_margin || 0) <= GOLD_100OZ_MIN_EQUITY) {
+          continue; // skip this instrument
         }
+
+        const nextUnits = s.units + 1;
+        const nextCommissionTotal = s.roundTripCommissionPerUnitPKR * nextUnits;
+        const nextMarginTotal = s.marginPerUnit * nextUnits;
+
+        const newTotalCommission = totalCommission - s.commissionTotalPKR + nextCommissionTotal;
+        const newTotalMargin = totalMargin - s.marginTotal + nextMarginTotal;
+
+        // Margin constraint
+        if (newTotalMargin > availableMarginBudget) {
+          continue; // skip adding this unit; margin would exceed
+        }
+
+        // Accept this unit
+        s.units = nextUnits;
+        s.commissionTotalPKR = nextCommissionTotal;
+        s.marginTotal = nextMarginTotal;
+
+        totalCommission = newTotalCommission;
+        totalMargin = newTotalMargin;
+
+        // Small early break to re-check while condition
+        if (totalCommission >= requiredCommissionPKR) break;
       }
+      safety++;
+      if (safety > 4999) break; // hard cap
+      // If a full pass adds nothing (stuck due to margin), break
+      if (slices.every(sl => sl.units === 0) && safety > 2) break;
+    }
 
-      const totalCommission = slices.reduce((s, sl) => s + sl.commissionTotal, 0);
-      const totalNOTs = totalCommission / NOT_DENOMINATOR;
-      const ratioPct = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
-      const fit = fitBadge(ratioPct);
-      const deltaNOTs = totalNOTs - dailyTargetNOTs;
+    // Compute totals / NOTs and apply fit logic
+    let totalNOTs = 0;
+    for (const s of slices) {
+      s.nots = s.commissionTotalPKR / NOT_DENOMINATOR;
+      totalNOTs += s.nots;
+    }
 
-      return { label: opt.label, slices, totalCommission, totalNOTs, fit, deltaNOTs };
-    });
+    const ratioPct = dailyTargetNOTs > 0 ? (totalNOTs / dailyTargetNOTs) * 100 : 0;
+    const fit = fitBadge(ratioPct);
+    const deltaNOTs = totalNOTs - dailyTargetNOTs;
 
+    return {
+      label,
+      slices,
+      totalCommissionPKR: totalCommission,
+      totalNOTs,
+      fit,
+      deltaNOTs,
+      totalMarginRequired: totalMargin,
+    };
+  };
+
+  const buildOptionsForClient = (client: Client): ClientDiversifiedAnalysis => {
+    const share = totalEquity > 0 ? (client.overall_margin || 0) / totalEquity : 0;
+    const dailyTargetNOTs = orgDailyTargetNOTs * share;
+
+    const { gold1, gold10, gold100, nasdaq, crude100 } = productIndex;
+
+    // Build prioritized arrays for rotation according to your rules:
+
+    // Option A: Gold-first (all Gold 1oz core), then rotate with Crude 100bbl, then Nasdaq
+    const optA: Product[] = [
+      ...(gold1 ? [gold1] : []),
+      ...(crude100 ? [crude100] : []),
+      ...(nasdaq ? [nasdaq] : []),
+    ];
+
+    // Option B: Gold 10oz core, then Crude 100bbl, then Nasdaq
+    const optB: Product[] = [
+      ...(gold10 ? [gold10] : []),
+      ...(crude100 ? [crude100] : []),
+      ...(nasdaq ? [nasdaq] : []),
+    ];
+
+    // Option C: Mixed rotation. If equity > 1M and gold100 exists, include it sparingly at end.
+    const includeGold100 = gold100 && (client.overall_margin || 0) > GOLD_100OZ_MIN_EQUITY;
+    const optC: Product[] = [
+      ...(gold1 ? [gold1] : []),
+      ...(crude100 ? [crude100] : []),
+      ...(nasdaq ? [nasdaq] : []),
+      ...(includeGold100 ? [gold100!] : []),
+    ];
+
+    const options: DiversifiedOption[] = [];
+    if (optA.length) options.push(buildOptionByRotation("Option A (Gold 1oz focus)", optA, client, dailyTargetNOTs));
+    if (optB.length) options.push(buildOptionByRotation("Option B (Gold 10oz focus)", optB, client, dailyTargetNOTs));
+    if (optC.length) options.push(buildOptionByRotation("Option C (Mixed)", optC, client, dailyTargetNOTs));
+
+    // Compute required PKR for reference
+    const requiredCommissionPKR = dailyTargetNOTs * NOT_DENOMINATOR;
+
+    // Finalize slice NOTs (redundant but explicit) and ensure no weird 13/1/1 due to sorting:
+    // rotation inherently balances adds across the list in order.
     return {
       client,
       dailyTargetNOTs,
-      requiredCommission: requiredPKR,
+      requiredCommissionPKR,
       options,
     };
   };
@@ -218,7 +339,7 @@ export default function TradeSuggestions() {
     return filtered
       .map(buildOptionsForClient)
       .sort((a, b) => (b.client.overall_margin || 0) - (a.client.overall_margin || 0));
-  }, [clients, pickCore, usdToPkr, searchTerm, orgDailyTargetNOTs, totalEquity]);
+  }, [clients, orgDailyTargetNOTs, totalEquity, productIndex, usdToPkr, searchTerm]);
 
   if (clientsLoading || productsLoading) {
     return (
@@ -237,7 +358,7 @@ export default function TradeSuggestions() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Trade Suggestions</h1>
         <p className="text-muted-foreground">
-          Diversified trade options to hit each client’s daily NOTs target
+          Diversified, margin-aware suggestions to hit each client’s daily NOTs target
         </p>
         {apiError && <p className="text-sm text-red-500">Target API error: {apiError}</p>}
       </div>
@@ -309,7 +430,7 @@ export default function TradeSuggestions() {
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Daily Target (Shown)</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -343,7 +464,7 @@ export default function TradeSuggestions() {
                   <p className="text-sm text-muted-foreground">
                     Equity: {formatCurrency(analysis.client.overall_margin)} •{" "}
                     Daily Target: {formatDecimal(analysis.dailyTargetNOTs)} NOTs •{" "}
-                    Required Commission: {formatCurrency(analysis.requiredCommission)}
+                    Required Commission: {formatCurrency(analysis.requiredCommissionPKR)}
                   </p>
                 </div>
                 <Badge variant="outline" className="text-lg px-3 py-1">
@@ -376,15 +497,15 @@ export default function TradeSuggestions() {
                         {opt.slices.map((sl) => (
                           <div key={sl.product.id} className="flex justify-between">
                             <span className="text-muted-foreground">
-                              {getProductIcon(sl.product.name)} {sl.product.name} — Units
+                              {instrumentEmoji(sl.product.name)} {sl.product.name} — Units
                             </span>
                             <span className="font-semibold">{sl.units}</span>
                           </div>
                         ))}
                         <div className="flex justify-between pt-2 border-t border-border">
-                          <span className="text-muted-foreground">Total Commission:</span>
+                          <span className="text-muted-foreground">Total Commission (RT):</span>
                           <span className="font-medium text-trading-profit">
-                            {formatCurrency(opt.totalCommission)}
+                            {formatCurrency(opt.totalCommissionPKR)}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -398,6 +519,12 @@ export default function TradeSuggestions() {
                           <span className={opt.deltaNOTs >= 0 ? "text-trading-profit font-medium" : "text-trading-loss font-medium"}>
                             {opt.deltaNOTs >= 0 ? "+" : ""}
                             {formatDecimal(opt.deltaNOTs)} NOTs
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Margin Required:</span>
+                          <span className="font-medium">
+                            {formatCurrency(opt.totalMarginRequired)}
                           </span>
                         </div>
                       </div>
@@ -442,4 +569,13 @@ export default function TradeSuggestions() {
       )}
     </div>
   );
+}
+
+// --- UI helpers ---
+function instrumentEmoji(name: string) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("gold")) return "🥇";
+  if (n.includes("crude")) return "🛢️";
+  if (n.includes("nasdaq")) return "📈";
+  return "📊";
 }

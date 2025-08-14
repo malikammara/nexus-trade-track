@@ -41,12 +41,27 @@ export default function TradeSuggestions() {
 
   // Filter for the three specific products
   const targetProducts = useMemo(() => {
-    return products.filter(product => 
-      product.name.toLowerCase().includes('crude') ||
-      product.name.toLowerCase().includes('gold') ||
-      product.name.toLowerCase().includes('nasdaq')
-    );
+    return products
+      .filter(product => {
+        const name = product.name.toLowerCase();
+  
+        // Include only crude, gold, and nasdaq products
+        const isTargetType =
+          name.includes("crude") ||
+          name.includes("gold") ||
+          name.includes("nasdaq");
+  
+        // Exclude ID contracts and "2Nasdaq"
+        const isExcluded =
+          name.includes(" id ") || name === "2nasdaq";
+  
+        return isTargetType && !isExcluded;
+      });
   }, [products]);
+  
+  const isExcluded =
+    name.includes("id") && (name.includes("gold") || name.includes("crude") || name.includes("silver")) ||
+    name === "2nasdaq";
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-PK', {

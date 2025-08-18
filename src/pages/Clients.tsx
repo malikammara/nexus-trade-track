@@ -59,7 +59,6 @@ export default function Clients() {
   const { addTransaction } = useDailyTransactions();
 
   // Search
-  the
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filters
@@ -163,7 +162,7 @@ export default function Clients() {
     }
   };
 
-  // --- Treat empty inputs as "no bound" ---
+  // Treat empty inputs as "no bound"
   const num = (v?: string) => {
     if (v === undefined || v === null) return undefined;
     if (String(v).trim() === "") return undefined;

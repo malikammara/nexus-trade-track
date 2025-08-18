@@ -55,7 +55,7 @@ interface GeminiResponse {
 // const APP_API_URL = "/api/gemini-trade-suggestions";
 //
 // If you insist on client-side (not recommended), use a public env var ONLY for local dev.
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; 
+const GEMINI_API_KEY = import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY; 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 

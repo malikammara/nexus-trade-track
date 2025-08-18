@@ -59,6 +59,7 @@ export default function Clients() {
   const { addTransaction } = useDailyTransactions();
 
   // Search
+  the
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filters
@@ -162,7 +163,7 @@ export default function Clients() {
     }
   };
 
-  // --- FIX: treat empty inputs as "no bound" (not 0) ---
+  // --- Treat empty inputs as "no bound" ---
   const num = (v?: string) => {
     if (v === undefined || v === null) return undefined;
     if (String(v).trim() === "") return undefined;
@@ -237,11 +238,13 @@ export default function Clients() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Client Management</h1>
-        <p className="text-muted-foreground">
+          <p className="text-muted-foreground">
             Manage client information and track their trading performance
           </p>
         </div>
-        <ClientForm onSubmit={handleAddClient} />
+
+        {/* Non-admins shouldn't see "Add Client" */}
+        {isAdmin && <ClientForm onSubmit={handleAddClient} />}
       </div>
 
       {/* Summary Stats */}
@@ -460,6 +463,8 @@ export default function Clients() {
               <div className="flex items-start justify-between">
                 <CardTitle className="text-lg">{client.name}</CardTitle>
                 <div className="flex gap-1">
+                  {/* Keep editing visible to all; gate it too if desired:
+                     {isAdmin && <ClientForm ... isEditing />} */}
                   <ClientForm
                     onSubmit={(data) => handleUpdateClient(client.id, data)}
                     client={client}
@@ -510,38 +515,40 @@ export default function Clients() {
                 </div>
               </div>
 
-              {/* Transaction Actions */}
-              <div className="pt-3 border-t border-border">
-                <div className="flex gap-2">
-                  <TransactionForm
-                    clientId={client.id}
-                    clientName={client.name}
-                    onSubmit={handleAddTransaction}
-                    transactionType="margin_add"
-                    buttonText="Add Margin"
-                    buttonVariant="outline"
-                    buttonSize="sm"
-                  />
-                  <TransactionForm
-                    clientId={client.id}
-                    clientName={client.name}
-                    onSubmit={handleAddTransaction}
-                    transactionType="withdrawal"
-                    buttonText="Withdrawal"
-                    buttonVariant="outline"
-                    buttonSize="sm"
-                  />
-                  <TransactionForm
-                    clientId={client.id}
-                    clientName={client.name}
-                    onSubmit={handleAddTransaction}
-                    transactionType="commission"
-                    buttonText="Commission"
-                    buttonVariant="outline"
-                    buttonSize="sm"
-                  />
+              {/* Non-admins shouldn't see margin/withdrawal/commission actions */}
+              {isAdmin && (
+                <div className="pt-3 border-t border-border">
+                  <div className="flex gap-2">
+                    <TransactionForm
+                      clientId={client.id}
+                      clientName={client.name}
+                      onSubmit={handleAddTransaction}
+                      transactionType="margin_add"
+                      buttonText="Add Margin"
+                      buttonVariant="outline"
+                      buttonSize="sm"
+                    />
+                    <TransactionForm
+                      clientId={client.id}
+                      clientName={client.name}
+                      onSubmit={handleAddTransaction}
+                      transactionType="withdrawal"
+                      buttonText="Withdrawal"
+                      buttonVariant="outline"
+                      buttonSize="sm"
+                    />
+                    <TransactionForm
+                      clientId={client.id}
+                      clientName={client.name}
+                      onSubmit={handleAddTransaction}
+                      transactionType="commission"
+                      buttonText="Commission"
+                      buttonVariant="outline"
+                      buttonSize="sm"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         ))}

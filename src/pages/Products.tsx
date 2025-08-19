@@ -168,12 +168,9 @@ export default function Products() {
                   </div>
                   
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Current Price:</span>
-                    <span className="font-medium">
-                      {product.price_quote.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 4
-                      })}
+                    <span className="text-sm text-muted-foreground">Break-Even Price:</span>
+                    <span className="font-bold text-trading-profit">
+                      {formatCurrency(product.price_quote)}
                     </span>
                   </div>
                   

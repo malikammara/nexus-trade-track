@@ -14,7 +14,10 @@ export function useClients() {
       setLoading(true)
       const { data, error } = await supabase
         .from('clients')
-        .select('*')
+        .select(`
+          *,
+          agent:agents(*)
+        `)
         .order('created_at', { ascending: false })
 
       if (error) throw error

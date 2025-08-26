@@ -6,6 +6,7 @@ import { UserMenu } from "./UserMenu";
 import { 
   BarChart3, 
   Users, 
+  UserCheck,
   Search, 
   TrendingUp,
   Calculator,
@@ -23,6 +24,7 @@ interface LayoutProps {
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
   { name: "Clients", href: "/clients", icon: Users },
+  { name: "Agents", href: "/agents", icon: UserCheck },
   { name: "Products", href: "/products", icon: Search },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Trade Suggestions", href: "/trade-suggestions", icon: Calculator },

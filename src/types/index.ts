@@ -6,8 +6,41 @@ export interface Client {
   invested_amount: number;
   monthly_revenue: number;
   nots_generated: number;
+  agent_id?: string;
   created_at: string;
   updated_at: string;
+  agent?: Agent;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  commission_rate: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  client_count?: number;
+  active_client_count?: number;
+  total_client_margin?: number;
+  total_client_revenue?: number;
+  total_client_nots?: number;
+  estimated_commission?: number;
+}
+
+export interface AgentPerformance {
+  agent_id: string;
+  agent_name: string;
+  agent_email: string;
+  total_clients: number;
+  active_clients: number;
+  total_margin: number;
+  total_revenue: number;
+  total_nots: number;
+  agent_commission: number;
+  avg_margin_per_client: number;
+  avg_revenue_per_client: number;
 }
 
 export interface Product {

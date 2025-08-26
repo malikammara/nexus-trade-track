@@ -500,6 +500,14 @@ export default function Clients() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2 text-sm">
+                {client.agent && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Agent:</span>
+                    <span className="font-medium text-primary">
+                      {client.agent.name}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Current Equity:</span>
                   <span className="font-medium text-trading-profit">

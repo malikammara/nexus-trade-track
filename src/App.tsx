@@ -10,6 +10,7 @@ import { Layout } from "@/components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import Products from "./pages/Products";
+import Agents from "./pages/Agents";
 import Analytics from "./pages/Analytics";
 import TradeSuggestions from "./pages/TradeSuggestions";
 import AdvancedTradeSuggestions from "./pages/AdvancedTradeSuggestions";
@@ -30,6 +31,7 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/clients" element={<Clients />} />
+                  <Route path="/agents" element={<Agents />} />
                   <Route path="/products" element={<Products />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/trade-suggestions" element={<TradeSuggestions />} />

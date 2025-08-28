@@ -274,9 +274,6 @@ export default function Agents() {
                     <Badge variant={agent.is_active ? "default" : "secondary"}>
                       {agent.is_active ? "Active" : "Inactive"}
                     </Badge>
-                    <Badge variant="outline">
-                      {formatPercentage(agent.commission_rate)} commission
-                    </Badge>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -315,10 +312,6 @@ export default function Agents() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-muted-foreground">{agent.email}</span>
-                </div>
                 {agent.phone && (
                   <div className="flex items-center gap-2">
                     <Phone className="h-3 w-3 text-muted-foreground" />
@@ -336,12 +329,6 @@ export default function Agents() {
                   <span className="text-muted-foreground">Total Revenue:</span>
                   <span className="font-medium text-trading-profit">
                     {formatCurrency(agent.total_client_revenue || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Est. Commission:</span>
-                  <span className="font-medium">
-                    {formatCurrency(agent.estimated_commission || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">

@@ -10,7 +10,9 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
-  Activity
+  Activity,
+  Minus,
+  Plus
 } from "lucide-react";
 import { useDashboard, EnhancedDashboardStats } from "@/hooks/useDashboard";
 import { cn } from "@/lib/utils";
@@ -55,13 +57,16 @@ export default function Dashboard() {
     );
   }
 
-  // ----- API-DRIVEN TARGETS (already NOTs; no client-side math) -----
+  // ----- BASE EQUITY TARGETS (calculated from base equity, not current equity) -----
   const enhanced = stats as EnhancedDashboardStats;
 
-  const totalEquity = enhanced.total_equity || 0;
+  const currentEquity = enhanced.total_equity || 0;
+  const baseEquity = enhanced.base_equity || 0;
+  const totalMarginIn = enhanced.total_margin_in || 0;
+  const totalWithdrawals = enhanced.total_withdrawals || 0;
   const currentNots = enhanced.total_nots || 0;
 
-  const monthlyTargetNots = enhanced.monthly_target_nots || 0; // NOTs
+  const monthlyTargetNots = enhanced.monthly_target_nots || 0; // NOTs (based on base equity)
   const dailyTargetNots = enhanced.daily_target_nots || 0;     // NOTs
   const weeklyTargetNots = enhanced.weekly_target_nots || 0;   // NOTs
 
@@ -103,19 +108,19 @@ export default function Dashboard() {
           </Card>
         </Link>
 
-        {/* Total Equity -> /analytics */}
+        {/* Current Equity -> /analytics */}
         <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Equity)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Equity</CardTitle>
+              <CardTitle className="text-sm font-medium">Current Equity</CardTitle>
               <TrendingUp className="h-4 w-4 text-trading-profit" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-trading-profit">
-                {formatCurrency(totalEquity)}
+                {formatCurrency(currentEquity)}
               </div>
               <p className="text-xs text-muted-foreground">
-                Target: {formatDecimal(monthlyTargetNots)} NOTs
+                Base: {formatCurrency(baseEquity)} (for targets)
               </p>
             </CardContent>
           </Card>
@@ -154,8 +159,8 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Today's Activity */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Today's Activity & Flow Tracking */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* Today's NOTs -> /analytics */}
         <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Today’s NOTs)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
@@ -174,11 +179,11 @@ export default function Dashboard() {
           </Card>
         </Link>
 
-        {/* Margin Added -> /clients (could also be /analytics; choose what fits your IA) */}
+        {/* Today's Margin Added -> /clients */}
         <Link to="/clients" className={clickableWrap} aria-label="Go to Clients (Margin Added)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Margin Added</CardTitle>
+              <CardTitle className="text-sm font-medium">Today's Margin</CardTitle>
               <ArrowUpRight className="h-4 w-4 text-trading-profit" />
             </CardHeader>
             <CardContent>
@@ -190,11 +195,11 @@ export default function Dashboard() {
           </Card>
         </Link>
 
-        {/* Withdrawals -> /clients */}
+        {/* Today's Withdrawals -> /clients */}
         <Link to="/clients" className={clickableWrap} aria-label="Go to Clients (Withdrawals)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Withdrawals</CardTitle>
+              <CardTitle className="text-sm font-medium">Today's Withdrawals</CardTitle>
               <ArrowDownRight className="h-4 w-4 text-trading-loss" />
             </CardHeader>
             <CardContent>
@@ -205,17 +210,49 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
+
+        {/* Total Margin In -> /analytics */}
+        <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Total Margin In)">
+          <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Margin In</CardTitle>
+              <Plus className="h-4 w-4 text-trading-profit" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-trading-profit">
+                {formatCurrency(totalMarginIn)}
+              </div>
+              <p className="text-xs text-muted-foreground">All-time deposits</p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Total Withdrawals -> /analytics */}
+        <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Total Withdrawals)">
+          <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Withdrawals</CardTitle>
+              <Minus className="h-4 w-4 text-trading-loss" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-trading-loss">
+                {formatCurrency(totalWithdrawals)}
+              </div>
+              <p className="text-xs text-muted-foreground">All-time withdrawals</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Performance Overview */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* NOTs Progress -> /analytics */}
+        {/* NOTs Progress (Base Equity Targets) -> /analytics */}
         <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Progress)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5" />
-                NOTs Progress (API-driven)
+                NOTs Progress (Base Equity)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -235,6 +272,14 @@ export default function Dashboard() {
               <div className="pt-4 border-t border-border">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Base equity (for targets):</span>
+                    <span className="font-medium">{formatCurrency(baseEquity)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Current equity:</span>
+                    <span className="font-medium">{formatCurrency(currentEquity)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Remaining NOTs needed:</span>
                     <span className="font-medium">{formatDecimal(remainingNots)}</span>
                   </div>
@@ -252,13 +297,13 @@ export default function Dashboard() {
           </Card>
         </Link>
 
-        {/* Team Performance Metrics -> /analytics */}
+        {/* Team Performance & Flow Metrics -> /analytics */}
         <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Team Metrics)">
           <Card className={cn("shadow-card cursor-pointer", clickableCard)}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <PieChart className="h-5 w-5" />
-                Team Performance Metrics
+                Team Performance & Flow
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -277,6 +322,12 @@ export default function Dashboard() {
                   </span>
                 </div>
 
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Net Flow</span>
+                  <span className="font-medium text-trading-profit">
+                    {formatCurrency(totalMarginIn - totalWithdrawals)}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center pt-2 border-t border-border">
                   <span className="text-sm font-medium">Avg Commission/Client</span>
                   <span className="font-bold text-trading-profit">

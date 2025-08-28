@@ -111,23 +111,26 @@ export default function Analytics() {
 
   // ---------- Targets (prefer API, fallback to formula) ----------
   const monthlyTargetNOTs = useMemo(() => {
-    if (equityTarget?.monthly_target_nots != null) {
-      return (equityTarget.monthly_target_nots || 0) / NOT_DENOMINATOR; // API PKR -> NOTs
-    }
-    // Fallback: (total_equity * 0.18) / 6000
-    if (equityTarget?.total_equity) {
-      return (equityTarget.total_equity * 0.18) / NOT_DENOMINATOR;
-    }
-    return 0;
+    // Calculate base equity (excluding margin-in, adding back withdrawals)
+    const totalMarginIn = transactions
+      .filter(t => t.transaction_type === "margin_add")
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalWithdrawals = transactions
+      .filter(t => t.transaction_type === "withdrawal")
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const currentEquity = equityTarget?.total_equity || 0;
+    const baseEquity = currentEquity - totalMarginIn + totalWithdrawals;
+    
+    // Use base equity for target calculation (18% of base equity)
+    return (baseEquity * 0.18) / NOT_DENOMINATOR;
   }, [equityTarget]);
 
   const dailyTargetNOTs = useMemo(() => {
-    if (equityTarget?.daily_target_nots != null) {
-      return (equityTarget.daily_target_nots || 0) / NOT_DENOMINATOR; // API PKR -> NOTs
-    }
-    // Fallback to 22 working days assumption
+    // Use base equity calculation, assume 22 working days
     return monthlyTargetNOTs / 22;
-  }, [equityTarget, monthlyTargetNOTs]);
+  }, [monthlyTargetNOTs]);
 
   const progressPercentage = monthlyTargetNOTs > 0
     ? (analytics.totalNOTs / monthlyTargetNOTs) * 100
@@ -182,7 +185,7 @@ export default function Analytics() {
               {formatDecimal(analytics.totalNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target (month): {formatDecimal(monthlyTargetNOTs)}
+              Target (base equity): {formatDecimal(monthlyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -227,7 +230,7 @@ export default function Analytics() {
               {formatDecimal(analytics.dailyAvgNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target (day): {formatDecimal(dailyTargetNOTs)}
+              Target (base): {formatDecimal(dailyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -239,7 +242,7 @@ export default function Analytics() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Monthly Progress (API targets ÷ 6000)
+              Monthly Progress (Base Equity Method)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -263,7 +266,13 @@ export default function Analytics() {
             
             <div className="pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total Equity:</span>
+                <span className="text-muted-foreground">Base Equity (targets):</span>
+                <span className="font-medium">
+                  {formatCurrency((equityTarget?.total_equity || 0) - analytics.totalMarginAdded + analytics.totalWithdrawals)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Current Equity:</span>
                 <span className="font-medium">
                   {formatCurrency(equityTarget?.total_equity || 0)}
                 </span>
@@ -341,7 +350,7 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Recent Daily Performance (now shows daily target vs achieved) */}
+      {/* Recent Daily Performance (base equity targets vs achieved) */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -353,7 +362,7 @@ export default function Analytics() {
           <div className="space-y-3">
             {dailyNOTs.slice(0, 10).map((day: any) => {
               const achieved = day.total_nots_achieved || 0;
-              // Use API daily target for each working day; zero for weekends unless you want same target.
+              // Use base equity daily target for each working day; zero for weekends
               const targetForDay = day.working_day ? dailyTargetNOTs : 0;
               const delta = achieved - targetForDay;
               const met = achieved >= targetForDay && day.working_day;

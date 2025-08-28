@@ -72,20 +72,46 @@ export default function TradeSuggestions() {
   // RPC target (same as Dashboard)
   const [orgDailyTargetNOTs, setOrgDailyTargetNOTs] = useState(0);
   const [totalEquity, setTotalEquity] = useState(0);
+  const [baseEquity, setBaseEquity] = useState(0);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
       try {
         setApiError(null);
-        const { data, error } = await supabase.rpc("calculate_equity_based_target");
-        if (error) throw error;
-        const row = Array.isArray(data) ? data[0] : data;
-        setTotalEquity(row?.total_equity ?? 0);
-        setOrgDailyTargetNOTs((row?.daily_target_nots ?? 0) / NOT_DENOMINATOR);
+        
+        // Get current equity and transactions to calculate base equity
+        const [{ data: targetData, error: targetError }, { data: transactionData, error: transactionError }] = await Promise.all([
+          supabase.rpc("calculate_equity_based_target"),
+          supabase.from('daily_transactions').select('transaction_type, amount')
+        ]);
+        
+        if (targetError) throw targetError;
+        if (transactionError) throw transactionError;
+        
+        const row = Array.isArray(targetData) ? targetData[0] : targetData;
+        const currentEquity = row?.total_equity ?? 0;
+        
+        // Calculate base equity (current - margin_in + withdrawals)
+        const totalMarginIn = (transactionData || [])
+          .filter(t => t.transaction_type === 'margin_add')
+          .reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        const totalWithdrawals = (transactionData || [])
+          .filter(t => t.transaction_type === 'withdrawal')
+          .reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        const calculatedBaseEquity = currentEquity - totalMarginIn + totalWithdrawals;
+        
+        setTotalEquity(currentEquity);
+        setBaseEquity(calculatedBaseEquity);
+        
+        // Use base equity for target calculation
+        setOrgDailyTargetNOTs((calculatedBaseEquity * 0.18) / 22 / NOT_DENOMINATOR);
       } catch (e: any) {
         setApiError(e?.message || "Failed to fetch equity-based target");
         setTotalEquity(0);
+        setBaseEquity(0);
         setOrgDailyTargetNOTs(0);
       }
     };
@@ -375,7 +401,8 @@ export default function TradeSuggestions() {
 
   // Build 3 diverse options per client (Gold-lean, Crude-lean, Balanced)
   function buildPlansForClient(client: Client): ClientPlan {
-    const share = totalEquity > 0 ? (client.overall_margin || 0) / totalEquity : 0;
+    // Use base equity for target calculation, but current equity for client share
+    const share = baseEquity > 0 ? (client.overall_margin || 0) / baseEquity : 0;
     const dailyTargetNOTs = orgDailyTargetNOTs * share;
 
     // Option A: Gold-lean (prefer 1oz to make per-day smaller tickets, diverse)
@@ -438,7 +465,7 @@ export default function TradeSuggestions() {
     return filtered
       .map(buildPlansForClient)
       .sort((a, b) => (b.client.overall_margin || 0) - (a.client.overall_margin || 0));
-  }, [clients, pick, orgDailyTargetNOTs, totalEquity, usdToPkr, searchTerm]);
+  }, [clients, pick, orgDailyTargetNOTs, baseEquity, usdToPkr, searchTerm]);
 
   if (clientsLoading || productsLoading) {
     return (
@@ -459,7 +486,7 @@ export default function TradeSuggestions() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Trade Suggestions</h1>
         <p className="text-muted-foreground">
-          Three per-day suggestions per client (Gold, Crude 100 bbl, Nasdaq) — Nasdaq ≤ 2; Gold 100oz only when equity &gt; ₨5,000,000.
+          Three per-day suggestions per client (Gold, Crude 100 bbl, Nasdaq) — Targets based on base equity (excluding margin flows).
         </p>
         {apiError && <p className="text-sm text-red-500">Target API error: {apiError}</p>}
       </div>
@@ -511,28 +538,27 @@ export default function TradeSuggestions() {
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Daily Target / Client</CardTitle>
+            <CardTitle className="text-sm font-medium">Base Equity</CardTitle>
             <Calculator className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
-              {formatDecimal(
-                plans.reduce((s, a) => s + a.dailyTargetNOTs, 0) / Math.max(plans.length, 1)
-              )} NOTs
+              {formatCurrency(baseEquity)}
             </div>
+            <p className="text-xs text-muted-foreground">For target calculation</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Daily Target (Shown)</CardTitle>
+            <CardTitle className="text-sm font-medium">Current Equity</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatDecimal(plans.reduce((s, a) => s + a.dailyTargetNOTs, 0))} NOTs
+              {formatCurrency(totalEquity)}
             </div>
-            <p className="text-xs text-muted-foreground">Equals org target if all clients listed</p>
+            <p className="text-xs text-muted-foreground">Including margin flows</p>
           </CardContent>
         </Card>
 

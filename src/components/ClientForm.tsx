@@ -23,6 +23,7 @@ import {
 import { Plus } from 'lucide-react'
 import { Client } from '@/types'
 import { useAuth } from '@/contexts/AuthProvider'
+import { Checkbox } from '@/components/ui/checkbox'
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),

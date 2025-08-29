@@ -12,7 +12,8 @@ import {
   DollarSign,
   BarChart3,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Plus
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { useDailyTransactions } from "@/hooks/useDailyTransactions";

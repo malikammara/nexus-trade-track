@@ -484,7 +484,7 @@ export default function TradeSuggestions() {
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Trade Suggestions</h1>
+        <h1 className="text-3xl font-bold text-foreground">CS Falcons Trade Suggestions</h1>
         <p className="text-muted-foreground">
           Three per-day suggestions per client (Gold, Crude 100 bbl, Nasdaq) — Targets based on base equity (excluding margin flows).
         </p>

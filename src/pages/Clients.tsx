@@ -236,7 +236,7 @@ export default function Clients() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Client Management</h1>
+          <h1 className="text-3xl font-bold text-foreground">CS Falcons Client Management</h1>
           <p className="text-muted-foreground">
             Manage client information and track their trading performance
           </p>
@@ -506,6 +506,12 @@ export default function Clients() {
                     <span className="font-medium text-primary">
                       {client.agent.name}
                     </span>
+                  </div>
+                )}
+                {client.is_new_client && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    <Badge variant="default" className="text-xs">New Client</Badge>
                   </div>
                 )}
                 <div className="flex justify-between">

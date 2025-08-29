@@ -33,7 +33,11 @@ export function useClients() {
     if (!isAdmin) throw new Error('Unauthorized')
 
     try {
-      const { data, error } = await supabase.rpc('add_client', clientData)
+      const { data, error } = await supabase.rpc('add_client', {
+        name: clientData.name,
+        overall_margin: clientData.overall_margin,
+        is_new_client: clientData.is_new_client || false
+      })
 
       if (error) throw error
       if (data) setClients(prev => [data, ...prev])
@@ -50,10 +54,8 @@ export function useClients() {
       const { data, error } = await supabase.rpc('update_client', {
         id,
         name: updates.name ?? null,
-        margin_in: updates.margin_in ?? null,
         overall_margin: updates.overall_margin ?? null,
-        invested_amount: updates.invested_amount ?? null,
-        monthly_revenue: updates.monthly_revenue ?? null
+        is_new_client: updates.is_new_client ?? null
       })
 
       if (error) throw error

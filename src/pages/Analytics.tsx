@@ -72,12 +72,18 @@ export default function Analytics() {
 
   // ---------- Aggregations ----------
   const analytics = useMemo(() => {
-    const commission = transactions
-      .filter(t => t.transaction_type === "commission")
+    // New deposits (from new clients marked as is_new_client)
+    const newDeposits = transactions
+      .filter(t => t.transaction_type === "margin_add" && t.client?.is_new_client)
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const marginAdd = transactions
-      .filter(t => t.transaction_type === "margin_add")
+    // Regular margin additions (existing clients)
+    const marginIn = transactions
+      .filter(t => t.transaction_type === "margin_add" && !t.client?.is_new_client)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const commission = transactions
+      .filter(t => t.transaction_type === "commission")
       .reduce((sum, t) => sum + t.amount, 0);
 
     const withdrawals = transactions
@@ -98,39 +104,52 @@ export default function Analytics() {
       ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) / dailyNOTs.length
       : 0;
 
+    // Calculate remaining days and required daily average
+    const today = new Date()
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    const remainingWorkingDays = (() => {
+      let workingDays = 0
+      const current = new Date(today)
+      while (current <= lastDayOfMonth) {
+        const dayOfWeek = current.getDay()
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+          workingDays++
+        }
+        current.setDate(current.getDate() + 1)
+      }
+      return workingDays
+    })()
+
     return {
+      newDeposits,
+      marginIn,
       totalCommission: commission,
-      totalMarginAdded: marginAdd,
       totalWithdrawals: withdrawals,
       totalNOTs,
       dailyAvgNOTs,
       workingDays,
-      bestDay
+      bestDay,
+      remainingWorkingDays
     };
   }, [transactions, dailyNOTs]);
 
   // ---------- Targets (prefer API, fallback to formula) ----------
   const monthlyTargetNOTs = useMemo(() => {
-    // Calculate base equity (excluding margin-in, adding back withdrawals)
-    const totalMarginIn = transactions
-      .filter(t => t.transaction_type === "margin_add")
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalWithdrawals = transactions
-      .filter(t => t.transaction_type === "withdrawal")
-      .reduce((sum, t) => sum + t.amount, 0);
-    
+    // Calculate base equity (excluding new deposits and margin-in, adding back withdrawals)
     const currentEquity = equityTarget?.total_equity || 0;
-    const baseEquity = currentEquity - totalMarginIn + totalWithdrawals;
+    const baseEquity = currentEquity - analytics.newDeposits - analytics.marginIn + analytics.totalWithdrawals;
     
     // Use base equity for target calculation (18% of base equity)
     return (baseEquity * 0.18) / NOT_DENOMINATOR;
-  }, [equityTarget]);
+  }, [equityTarget, analytics]);
 
   const dailyTargetNOTs = useMemo(() => {
     // Use base equity calculation, assume 22 working days
     return monthlyTargetNOTs / 22;
   }, [monthlyTargetNOTs]);
+
+  const remainingTargetNOTs = Math.max(0, monthlyTargetNOTs - analytics.totalNOTs);
+  const requiredDailyAvg = analytics.remainingWorkingDays > 0 ? remainingTargetNOTs / analytics.remainingWorkingDays : 0;
 
   const progressPercentage = monthlyTargetNOTs > 0
     ? (analytics.totalNOTs / monthlyTargetNOTs) * 100
@@ -141,9 +160,9 @@ export default function Analytics() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Performance Analytics</h1>
+          <h1 className="text-3xl font-bold text-foreground">CS Falcons Analytics</h1>
           <p className="text-muted-foreground">
-            Detailed analysis of CS team performance and NOTs achievement
+            Detailed analysis of CS Falcons team performance and NOTs achievement
           </p>
         </div>
 
@@ -174,7 +193,7 @@ export default function Analytics() {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total NOTs Achieved</CardTitle>
@@ -207,30 +226,75 @@ export default function Analytics() {
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Flow</CardTitle>
-            <TrendingUp className="h-4 w-4 text-trading-profit" />
+            <CardTitle className="text-sm font-medium">New Deposits</CardTitle>
+            <ArrowUpRight className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
-              {formatCurrency(analytics.totalMarginAdded - analytics.totalWithdrawals)}
+              {formatCurrency(analytics.newDeposits)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Deposits - Withdrawals
+              From new clients this month
             </p>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Daily Avg NOTs</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Margin In (Deposits)</CardTitle>
+            <Plus className="h-4 w-4 text-trading-profit" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-trading-profit">
+              {formatCurrency(analytics.marginIn)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              From existing clients
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Withdrawals</CardTitle>
+            <ArrowDownRight className="h-4 w-4 text-trading-loss" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-trading-loss">
+              {formatCurrency(analytics.totalWithdrawals)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total client withdrawals
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Remaining Days</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatDecimal(analytics.dailyAvgNOTs)}
+              {analytics.remainingWorkingDays}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target (base): {formatDecimal(dailyTargetNOTs)}
+              Working days left
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Required Daily Avg</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-warning">
+              {formatDecimal(requiredDailyAvg)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              NOTs needed daily to hit target
             </p>
           </CardContent>
         </Card>
@@ -316,17 +380,29 @@ export default function Analytics() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 border border-border rounded-lg">
+                <div className="p-3 border border-border rounded-lg bg-trading-profit/5">
                   <div className="flex items-center gap-2 mb-1">
-                    <ArrowUpRight className="h-4 w-4 text-trading-profit" />
-                    <span className="text-sm font-medium">Deposits</span>
+                    <Plus className="h-4 w-4 text-trading-profit" />
+                    <span className="text-sm font-medium">New Deposits</span>
                   </div>
                   <p className="text-lg font-bold text-trading-profit">
-                    {formatCurrency(analytics.totalMarginAdded)}
+                    {formatCurrency(analytics.newDeposits)}
                   </p>
+                  <p className="text-xs text-muted-foreground">New clients</p>
                 </div>
 
-                <div className="p-3 border border-border rounded-lg">
+                <div className="p-3 border border-border rounded-lg bg-trading-profit/5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ArrowUpRight className="h-4 w-4 text-trading-profit" />
+                    <span className="text-sm font-medium">Margin In</span>
+                  </div>
+                  <p className="text-lg font-bold text-trading-profit">
+                    {formatCurrency(analytics.marginIn)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Existing clients</p>
+                </div>
+
+                <div className="p-3 border border-border rounded-lg bg-trading-loss/5">
                   <div className="flex items-center gap-2 mb-1">
                     <ArrowDownRight className="h-4 w-4 text-trading-loss" />
                     <span className="text-sm font-medium">Withdrawals</span>
@@ -334,6 +410,20 @@ export default function Analytics() {
                   <p className="text-lg font-bold text-trading-loss">
                     {formatCurrency(analytics.totalWithdrawals)}
                   </p>
+                  <p className="text-xs text-muted-foreground">All withdrawals</p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-border space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Remaining working days:</span>
+                  <span className="font-medium">{analytics.remainingWorkingDays}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Required daily avg:</span>
+                  <span className="font-medium text-warning">
+                    {formatDecimal(requiredDailyAvg)} NOTs
+                  </span>
                 </div>
               </div>
 

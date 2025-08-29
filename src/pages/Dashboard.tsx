@@ -18,7 +18,26 @@ import { useDashboard, EnhancedDashboardStats } from "@/hooks/useDashboard";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
-  const { stats, retentionMetrics, loading, error } = useDashboard();
+  const { stats, retentionMetrics, loading, error } = useDashboard()
+
+  // Calculate remaining days in month
+  const today = new Date()
+  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  const remainingDays = Math.max(0, Math.ceil((lastDayOfMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
+  
+  // Calculate remaining working days (exclude weekends)
+  const remainingWorkingDays = (() => {
+    let workingDays = 0
+    const current = new Date(today)
+    while (current <= lastDayOfMonth) {
+      const dayOfWeek = current.getDay()
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+        workingDays++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return workingDays
+  })()
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PK", {
@@ -74,6 +93,9 @@ export default function Dashboard() {
     monthlyTargetNots > 0 ? Math.min(100, (currentNots / monthlyTargetNots) * 100) : 0;
 
   const remainingNots = Math.max(0, monthlyTargetNots - currentNots);
+  
+  // Calculate required daily average for remaining days
+  const requiredDailyAvg = remainingWorkingDays > 0 ? remainingNots / remainingWorkingDays : 0;
   // ------------------------------------------------------------------
 
   // Small helper to give clickable cards a consistent interaction affordance
@@ -84,9 +106,9 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Performance Dashboard</h1>
+        <h1 className="text-3xl font-bold text-foreground">CS Falcons Dashboard</h1>
         <p className="text-muted-foreground">
-          Monitor your CS team's trading performance and client management metrics
+          Monitor CS Falcons team trading performance and client management metrics
         </p>
       </div>
 
@@ -282,6 +304,14 @@ export default function Dashboard() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Remaining NOTs needed:</span>
                     <span className="font-medium">{formatDecimal(remainingNots)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Remaining working days:</span>
+                    <span className="font-medium">{remainingWorkingDays}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Required daily avg:</span>
+                    <span className="font-medium text-warning">{formatDecimal(requiredDailyAvg)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Daily target:</span>

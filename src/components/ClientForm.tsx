@@ -26,11 +26,8 @@ import { useAuth } from '@/contexts/AuthProvider'
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  margin_in: z.number().min(0, 'Margin In must be non-negative'),
   overall_margin: z.number().min(0, 'Overall Margin must be non-negative'),
-  invested_amount: z.number().min(0, 'Invested Amount must be non-negative'),
-  monthly_revenue: z.number().min(0, 'Monthly Revenue must be non-negative'),
-  nots_generated: z.number().min(0, 'NOTs Generated must be non-negative'),
+  is_new_client: z.boolean().default(false),
 })
 
 type ClientFormData = z.infer<typeof clientSchema>
@@ -50,18 +47,12 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
     resolver: zodResolver(clientSchema),
     defaultValues: client ? {
       name: client.name,
-      margin_in: client.margin_in,
       overall_margin: client.overall_margin,
-      invested_amount: client.invested_amount,
-      monthly_revenue: client.monthly_revenue,
-      nots_generated: client.nots_generated,
+      is_new_client: client.is_new_client || false,
     } : {
       name: '',
-      margin_in: 0,
       overall_margin: 0,
-      invested_amount: 0,
-      monthly_revenue: 0,
-      nots_generated: 0,
+      is_new_client: false,
     }
   })
 
@@ -69,11 +60,8 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
     if (client) {
       form.reset({
         name: client.name,
-        margin_in: client.margin_in,
         overall_margin: client.overall_margin,
-        invested_amount: client.invested_amount,
-        monthly_revenue: client.monthly_revenue,
-        nots_generated: client.nots_generated,
+        is_new_client: client.is_new_client || false,
       })
     }
   }, [client, form])
@@ -84,7 +72,6 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
     setLoading(true)
     try {
       await onSubmit(data as Omit<Client, 'id' | 'created_at' | 'updated_at'>)
-      setOpen(false)
       form.reset()
     } catch (error) {
       console.error('Failed to submit client:', error)
@@ -132,10 +119,32 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
             
             <FormField
               control={form.control}
+              name="is_new_client"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>New Client</FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Mark as new client for this month's deposit tracking
+                    </p>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
               name="overall_margin"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Overall Margin</FormLabel>
+                  <FormLabel>Current Equity</FormLabel>
                   <FormControl>
                     <Input 
                       type="number" 

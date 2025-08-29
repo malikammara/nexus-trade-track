@@ -9,6 +9,7 @@ export interface Client {
   agent_id?: string;
   created_at: string;
   updated_at: string;
+  is_new_client?: boolean;
   agent?: Agent;
 }
 

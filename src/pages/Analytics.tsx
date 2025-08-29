@@ -333,7 +333,12 @@ export default function Analytics() {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Base Equity (targets):</span>
                 <span className="font-medium">
-                  {formatCurrency((equityTarget?.total_equity || 0) - analytics.totalMarginAdded + analytics.totalWithdrawals)}
+                  {formatCurrency(
+                    (equityTarget?.total_equity || 0)
+                    - analytics.newDeposits
+                    - analytics.marginIn
+                    + analytics.totalWithdrawals
+                  )}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -476,7 +481,7 @@ export default function Analytics() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Achieved (NOTs)</p>
-                      <p className="font-bold {met ? 'text-trading-profit' : ''}">
+                      <p className={`font-bold ${met ? 'text-trading-profit' : ''}`}>
                         {formatDecimal(achieved)}
                       </p>
                     </div>

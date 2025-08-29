@@ -45,7 +45,7 @@ export function Layout({ children }: LayoutProps) {
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-lg font-semibold text-foreground">
-                Daily Trade Count
+                CS Falcons
               </span>
             </Link>
 

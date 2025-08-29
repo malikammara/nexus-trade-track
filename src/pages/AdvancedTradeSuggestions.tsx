@@ -410,7 +410,7 @@ Return ONLY JSON in this exact shape, with no extra commentary:
       <div className="space-y-1">
         <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
           <Brain className="h-8 w-8 text-primary" />
-          Advanced Trade Suggestions
+          CS Falcons Advanced Trade Suggestions
         </h1>
         <p className="text-muted-foreground">
           Streamlined AI recommendations to hit NOTs (PKR-first). Commissions remain in USD.

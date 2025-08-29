@@ -161,7 +161,7 @@ export default function Agents() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Agent Management</h1>
+          <h1 className="text-3xl font-bold text-foreground">CS Falcons Agent Management</h1>
           <p className="text-muted-foreground">
             Manage agents and track their client performance
           </p>
@@ -217,13 +217,16 @@ export default function Agents() {
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Agent Commissions</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Company Revenue</CardTitle>
+            <TrendingUp className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(totalStats.total_commission)}
+            <div className="text-2xl font-bold text-trading-profit">
+              {formatCurrency(totalStats.total_revenue)}
             </div>
+            <p className="text-xs text-muted-foreground">
+              From all agents
+            </p>
           </CardContent>
         </Card>
 

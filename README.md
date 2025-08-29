@@ -1,6 +1,6 @@
-# PMEX CS Team Performance Tracker
+# CS Falcons Performance Tracker
 
-A comprehensive web application for PMEX brokerage CS team to track client performance, NOTs (Number of Trades), and team targets.
+A comprehensive web application for CS Falcons team to track client performance, NOTs (Number of Trades), and team targets.
 
 ## Features
 
@@ -114,4 +114,4 @@ For technical support or feature requests, please contact the development team.
 
 ---
 
-**Built for PMEX Brokerage CS Team** 🚀
+**Built for CS Falcons Team** 🚀

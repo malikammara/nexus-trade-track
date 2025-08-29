@@ -78,7 +78,7 @@ export default function Products() {
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Product Catalog</h1>
+        <h1 className="text-3xl font-bold text-foreground">CS Falcons Product Catalog</h1>
         <p className="text-muted-foreground">
           Search and explore trading products with commission rates and market data
         </p>

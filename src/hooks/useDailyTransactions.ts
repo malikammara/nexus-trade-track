@@ -90,7 +90,7 @@ export function useDailyTransactions() {
     if (!isAdmin) throw new Error('Unauthorized')
 
     try {
-      const { data, error } = await supabase.rpc('add_daily_transaction', {
+      const { data, error } = await supabase.rpc('add_daily_transaction_enhanced', {
         p_client_id: clientId,
         p_transaction_type: transactionType,
         p_amount: amount,
@@ -110,6 +110,27 @@ export function useDailyTransactions() {
     }
   }
 
+  const getCashFlowMetrics = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_cash_flow_metrics')
+      if (error) throw error
+      return data?.[0] || null
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to get cash flow metrics')
+    }
+  }
+
+  const resetNewClientStatus = async () => {
+    if (!isAdmin) throw new Error('Unauthorized')
+    
+    try {
+      const { data, error } = await supabase.rpc('reset_new_client_status_monthly')
+      if (error) throw error
+      return data
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to reset new client status')
+    }
+  }
   const getEquityBasedTarget = async () => {
     try {
       const { data, error } = await supabase.rpc('calculate_equity_based_target')
@@ -156,6 +177,8 @@ export function useDailyTransactions() {
     loading,
     error,
     addTransaction,
+    getCashFlowMetrics,
+    resetNewClientStatus,
     getEquityBasedTarget,
     getRetentionMetrics,
     getTodayTransactions,

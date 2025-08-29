@@ -294,12 +294,20 @@ export default function Dashboard() {
               <div className="pt-4 border-t border-border">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Base equity (for targets):</span>
+                    <span className="text-muted-foreground">Base equity (targets):</span>
                     <span className="font-medium">{formatCurrency(baseEquity)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Current equity:</span>
+                    <span className="text-muted-foreground">Current equity (total):</span>
                     <span className="font-medium">{formatCurrency(currentEquity)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">New deposits (margin_in):</span>
+                    <span className="font-medium text-trading-profit">{formatCurrency(totalMarginIn)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total withdrawals:</span>
+                    <span className="font-medium text-trading-loss">{formatCurrency(totalWithdrawals)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Remaining NOTs needed:</span>

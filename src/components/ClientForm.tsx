@@ -29,6 +29,7 @@ const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   overall_margin: z.number().min(0, 'Overall Margin must be non-negative'),
   is_new_client: z.boolean().default(false),
+  margin_in: z.number().min(0, 'Initial deposit must be non-negative').optional(),
 })
 
 type ClientFormData = z.infer<typeof clientSchema>
@@ -50,10 +51,12 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
       name: client.name,
       overall_margin: client.overall_margin,
       is_new_client: client.is_new_client || false,
+      margin_in: client.margin_in || 0,
     } : {
       name: '',
       overall_margin: 0,
       is_new_client: false,
+      margin_in: 0,
     }
   })
 
@@ -63,6 +66,7 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
         name: client.name,
         overall_margin: client.overall_margin,
         is_new_client: client.is_new_client || false,
+        margin_in: client.margin_in || 0,
       })
     }
   }, [client, form])
@@ -132,13 +136,38 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
                   <div className="space-y-1 leading-none">
                     <FormLabel>New Client</FormLabel>
                     <p className="text-xs text-muted-foreground">
-                      Mark as new client for this month's deposit tracking
+                      Mark as new client (will auto-reset next month)
                     </p>
                   </div>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            
+            {form.watch('is_new_client') && (
+              <FormField
+                control={form.control}
+                name="margin_in"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Initial Deposit (New Client)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      This amount will be tracked as new deposit for cash flow analysis
+                    </p>
+                  </FormItem>
+                )}
+              />
+            )}
             
             <FormField
               control={form.control}
@@ -156,6 +185,9 @@ export function ClientForm({ onSubmit, client, isEditing = false }: ClientFormPr
                     />
                   </FormControl>
                   <FormMessage />
+                   <p className="text-xs text-muted-foreground">
+                     Total current equity (including deposits and margin additions)
+                   </p>
                 </FormItem>
               )}
             />

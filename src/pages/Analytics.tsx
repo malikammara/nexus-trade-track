@@ -29,6 +29,8 @@ export default function Analytics() {
   const { 
     transactions, 
     dailyNOTs, 
+    getCashFlowMetrics,
+    resetNewClientStatus,
     getEquityBasedTarget, 
     getRetentionMetrics,
     loading 
@@ -36,16 +38,19 @@ export default function Analytics() {
   
   const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
   const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
+  const [cashFlowMetrics, setCashFlowMetrics] = useState<any>(null);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [targetData, retentionData] = await Promise.all([
+        const [targetData, retentionData, cashFlowData] = await Promise.all([
           getEquityBasedTarget(),
-          getRetentionMetrics(30)
+          getRetentionMetrics(30),
+          getCashFlowMetrics()
         ]);
         setEquityTargetRaw(targetData);
         setRetentionMetrics(retentionData);
+        setCashFlowMetrics(cashFlowData);
       } catch (error) {
         console.error("Failed to fetch metrics:", error);
       }
@@ -73,23 +78,15 @@ export default function Analytics() {
 
   // ---------- Aggregations ----------
   const analytics = useMemo(() => {
-    // New deposits (from new clients marked as is_new_client)
-    const newDeposits = transactions
-      .filter(t => t.transaction_type === "margin_add" && t.client?.is_new_client)
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    // Regular margin additions (existing clients)
-    const marginIn = transactions
-      .filter(t => t.transaction_type === "margin_add" && !t.client?.is_new_client)
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Use cash flow metrics from the database function
+    const newDeposits = cashFlowMetrics?.total_new_deposits || 0;
+    const marginIn = cashFlowMetrics?.total_margin_additions || 0;
+    const totalWithdrawals = cashFlowMetrics?.total_withdrawals || 0;
 
     const commission = transactions
       .filter(t => t.transaction_type === "commission")
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const withdrawals = transactions
-      .filter(t => t.transaction_type === "withdrawal")
-      .reduce((sum, t) => sum + t.amount, 0);
 
     const totalNOTs = transactions
       .filter(t => t.transaction_type === "commission")
@@ -125,14 +122,14 @@ export default function Analytics() {
       newDeposits,
       marginIn,
       totalCommission: commission,
-      totalWithdrawals: withdrawals,
+      totalWithdrawals,
       totalNOTs,
       dailyAvgNOTs,
       workingDays,
       bestDay,
       remainingWorkingDays
     };
-  }, [transactions, dailyNOTs]);
+  }, [transactions, dailyNOTs, cashFlowMetrics]);
 
   // ---------- Targets (prefer API, fallback to formula) ----------
   const monthlyTargetNOTs = useMemo(() => {
@@ -227,7 +224,7 @@ export default function Analytics() {
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Deposits</CardTitle>
+            <CardTitle className="text-sm font-medium">New Deposits (margin_in)</CardTitle>
             <ArrowUpRight className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
@@ -235,14 +232,14 @@ export default function Analytics() {
               {formatCurrency(analytics.newDeposits)}
             </div>
             <p className="text-xs text-muted-foreground">
-              From new clients this month
+              Stored in margin_in column
             </p>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Margin In (Deposits)</CardTitle>
+            <CardTitle className="text-sm font-medium">Additional Margin</CardTitle>
             <Plus className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
@@ -250,7 +247,7 @@ export default function Analytics() {
               {formatCurrency(analytics.marginIn)}
             </div>
             <p className="text-xs text-muted-foreground">
-              From existing clients
+              Additional margin from existing clients
             </p>
           </CardContent>
         </Card>

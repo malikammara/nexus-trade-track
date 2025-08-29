@@ -38,40 +38,28 @@ export function useDashboard() {
     try {
       setLoading(true)
 
-      // 1) Main aggregate stats for the dashboard (DB view/table)
+      // 1) Use new cash flow dashboard stats
       const { data: dashboardData, error: dashboardError } = await supabase
-        .from('enhanced_dashboard_stats')
+        .from('cash_flow_dashboard_stats')
         .select('*')
         .single()
 
       if (dashboardError) throw dashboardError
 
-      // 2) Get total margin-in and withdrawals from transactions
-      const { data: transactionSums, error: transactionError } = await supabase
-        .from('daily_transactions')
-        .select('transaction_type, amount')
+      // 2) Get cash flow metrics
+      const { data: cashFlowData, error: cashFlowError } = await supabase.rpc('get_cash_flow_metrics')
+      if (cashFlowError) throw cashFlowError
+      const cashFlow = cashFlowData?.[0] || {}
 
-      if (transactionError) throw transactionError
-
-      const totalMarginIn = (transactionSums || [])
-        .filter(t => t.transaction_type === 'margin_add')
-        .reduce((sum, t) => sum + (t.amount || 0), 0)
-
-      const totalWithdrawals = (transactionSums || [])
-        .filter(t => t.transaction_type === 'withdrawal')
-        .reduce((sum, t) => sum + (t.amount || 0), 0)
-
-      // Calculate base equity for target calculation
+      // 3) Calculate targets based on base equity from the view
       const currentEquity = dashboardData.total_equity || 0
-      const baseEquity = currentEquity - totalMarginIn + totalWithdrawals
-      // 3) Calculate targets based on base equity (not current equity)
+      const baseEquity = dashboardData.base_equity || 0
       const baseEquityTargets = {
         monthly_target_nots: baseEquity * 0.18,
         daily_target_nots: (baseEquity * 0.18) / 22, // Assuming 22 working days
         weekly_target_nots: (baseEquity * 0.18) / 22 * 5, // 5 working days per week
       }
-
-      // 4) Also get API targets for comparison (optional)
+      // 4) Get API targets for comparison (optional)
       const { data: targetData, error: targetError } = await supabase
         .rpc('calculate_equity_based_target')
 
@@ -98,7 +86,7 @@ export function useDashboard() {
       setStats({
         // Base stats
         total_clients: dashboardData.total_clients || 0,
-        total_margin_in: totalMarginIn,
+        total_margin_in: (dashboardData.total_new_deposits || 0) + (dashboardData.total_margin_additions || 0),
         total_overall_margin: dashboardData.total_equity || 0,
         total_monthly_revenue: dashboardData.total_monthly_revenue || 0,
         total_nots: dashboardData.total_nots || 0,
@@ -115,8 +103,8 @@ export function useDashboard() {
         // Enhanced fields
         total_equity: dashboardData.total_equity || 0,
         base_equity: baseEquity,
-        total_margin_in: totalMarginIn,
-        total_withdrawals: totalWithdrawals,
+        total_margin_in: (dashboardData.total_new_deposits || 0) + (dashboardData.total_margin_additions || 0),
+        total_withdrawals: dashboardData.total_withdrawals || 0,
         monthly_target_nots: monthlyTargetNOTs, // NOTs
         today_nots: dashboardData.today_nots || 0,
         today_margin_added: dashboardData.today_margin_added || 0,

@@ -66,27 +66,17 @@ export function useClients() {
     }
   }
 
-  const addDailyMargin = async (
-    clientId: string,
-    marginIn: number,
-    overallMargin: number,
-    entryDate?: string
-  ) => {
+  const resetNewClientStatus = async () => {
     if (!isAdmin) throw new Error('Unauthorized')
 
     try {
-      const { data, error } = await supabase.rpc('add_daily_margin', {
-        client_id: clientId,
-        margin_in: marginIn,
-        overall_margin: overallMargin,
-        entry_date: entryDate ?? null
-      })
+      const { data, error } = await supabase.rpc('reset_new_client_status_monthly')
 
       if (error) throw error
-      if (data) setClients(prev => prev.map(c => c.id === clientId ? data : c))
+      await fetchClients() // Refresh the list
       return data
     } catch (err) {
-      throw err instanceof Error ? err : new Error('Failed to add daily margin')
+      throw err instanceof Error ? err : new Error('Failed to reset new client status')
     }
   }
 
@@ -117,7 +107,7 @@ export function useClients() {
     addClient,
     updateClient,
     deleteClient,
-    addDailyMargin,
+    resetNewClientStatus,
     refetch: fetchClients
   }
 }

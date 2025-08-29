@@ -511,7 +511,15 @@ export default function Clients() {
                 {client.is_new_client && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status:</span>
-                    <Badge variant="default" className="text-xs">New Client</Badge>
+                    <Badge variant="default" className="text-xs">New Client (This Month)</Badge>
+                  </div>
+                )}
+                {client.is_new_client && client.margin_in > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Initial Deposit:</span>
+                    <span className="font-medium text-trading-profit">
+                      {formatCurrency(client.margin_in)}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between">

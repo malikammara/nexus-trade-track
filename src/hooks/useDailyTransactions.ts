@@ -25,16 +25,17 @@ export interface DailyNOTsTracking {
   working_day: boolean
 }
 
-export function useDailyTransactions() {
+export function useDailyTransactions(filterMonth?: number, filterYear?: number) {
   const [transactions, setTransactions] = useState<DailyTransaction[]>([])
   const [dailyNOTs, setDailyNOTs] = useState<DailyNOTsTracking[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { isAdmin } = useAuth()
 
-  const fetchTransactions = async (startDate?: string, endDate?: string) => {
+  const fetchTransactions = async (month?: number, year?: number) => {
     try {
       setLoading(true)
+      
       let query = supabase
         .from('daily_transactions')
         .select(`
@@ -44,11 +45,11 @@ export function useDailyTransactions() {
         .order('transaction_date', { ascending: false })
         .order('created_at', { ascending: false })
 
-      if (startDate) {
-        query = query.gte('transaction_date', startDate)
-      }
-      if (endDate) {
-        query = query.lte('transaction_date', endDate)
+      // Filter by month/year if provided
+      if (month && year) {
+        const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0] // Last day of month
+        query = query.gte('transaction_date', startDate).lte('transaction_date', endDate)
       }
 
       const { data, error } = await query
@@ -62,21 +63,43 @@ export function useDailyTransactions() {
     }
   }
 
-  const fetchDailyNOTs = async (days: number = 30) => {
+  const fetchDailyNOTs = async (month?: number, year?: number) => {
     try {
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      
-      const { data, error } = await supabase
+      let query = supabase
         .from('daily_nots_tracking')
         .select('*')
-        .gte('tracking_date', startDate.toISOString().split('T')[0])
         .order('tracking_date', { ascending: false })
+      
+      // Filter by month/year if provided
+      if (month && year) {
+        const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+        query = query.gte('tracking_date', startDate).lte('tracking_date', endDate)
+      } else {
+        // Default to last 30 days if no filter
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - 30)
+        query = query.gte('tracking_date', startDate.toISOString().split('T')[0])
+      }
 
+      const { data, error } = await query
       if (error) throw error
       setDailyNOTs(data || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch daily NOTs')
+    }
+  }
+
+  const getCashFlowMetricsForMonth = async (month: number, year: number) => {
+    try {
+      const { data, error } = await supabase.rpc('get_cash_flow_metrics_for_month', {
+        target_month: month,
+        target_year: year
+      })
+      if (error) throw error
+      return data?.[0] || null
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to get cash flow metrics for month')
     }
   }
 
@@ -101,8 +124,8 @@ export function useDailyTransactions() {
       if (error) throw error
       
       // Refresh data
-      await fetchTransactions()
-      await fetchDailyNOTs()
+      await fetchTransactions(filterMonth, filterYear)
+      await fetchDailyNOTs(filterMonth, filterYear)
       
       return data
     } catch (err) {
@@ -167,9 +190,9 @@ export function useDailyTransactions() {
   }
 
   useEffect(() => {
-    fetchTransactions()
-    fetchDailyNOTs()
-  }, [])
+    fetchTransactions(filterMonth, filterYear)
+    fetchDailyNOTs(filterMonth, filterYear)
+  }, [filterMonth, filterYear])
 
   return {
     transactions,
@@ -177,6 +200,7 @@ export function useDailyTransactions() {
     loading,
     error,
     addTransaction,
+    getCashFlowMetricsForMonth,
     getCashFlowMetrics,
     resetNewClientStatus,
     getEquityBasedTarget,
@@ -184,8 +208,8 @@ export function useDailyTransactions() {
     getTodayTransactions,
     getTransactionsByType,
     refetch: () => {
-      fetchTransactions()
-      fetchDailyNOTs()
+      fetchTransactions(filterMonth, filterYear)
+      fetchDailyNOTs(filterMonth, filterYear)
     }
   }
 }

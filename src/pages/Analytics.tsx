@@ -1,12 +1,8 @@
-// src/pages/Analytics.tsx
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MonthYearPicker } from "@/components/MonthYearPicker";
 import {
-  Calendar as CalendarIcon,
   TrendingUp,
   Target,
   Award,
@@ -14,59 +10,70 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
-  Plus
+  Plus,
+  Clock
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
 import { useDailyTransactions } from "@/hooks/useDailyTransactions";
-import { useMonthlyReset } from "@/hooks/useMonthlyReset";
 
 const NOT_DENOMINATOR = 6000;
 
 export default function Analytics() {
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
-  });
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
   const {
     transactions,
     dailyNOTs,
-    getCashFlowMetrics,
-    resetNewClientStatus,
-    getEquityBasedTarget,
-    getRetentionMetrics,
+    getCashFlowMetricsForMonth,
     loading,
-  } = useDailyTransactions();
-  const { getCurrentMonthStats } = useMonthlyReset();
+  } = useDailyTransactions(selectedMonth, selectedYear);
 
-  const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
-  const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
-  const [cashFlowMetrics, setCashFlowMetrics] = useState<any>(null);
+  const [cashFlowMetrics, setCashFlowMetrics] = useState<any>(null)
+  const [monthlyStats, setMonthlyStats] = useState<any>(null)
+  const [baseEquity, setBaseEquity] = useState(0)
+  const [currentEquity, setCurrentEquity] = useState(0)
 
+  const handleMonthYearChange = (month: number, year: number) => {
+    setSelectedMonth(month)
+    setSelectedYear(year)
+  }
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [monthlyStats, retentionData, cashFlowData] = await Promise.all([
-          getCurrentMonthStats(),
-          getRetentionMetrics(30),
-          getCashFlowMetrics(),
-        ]);
-        setEquityTargetRaw(monthlyStats);
-        setRetentionMetrics(retentionData);
-        setCashFlowMetrics(cashFlowData);
+        // Get cash flow metrics for selected month
+        const cashFlowData = await getCashFlowMetricsForMonth(selectedMonth, selectedYear)
+        setCashFlowMetrics(cashFlowData)
+        
+        // Get monthly team stats
+        const { data: teamStatsData, error: teamStatsError } = await supabase.rpc('get_monthly_team_stats', {
+          target_month: selectedMonth,
+          target_year: selectedYear
+        })
+        if (teamStatsError) throw teamStatsError
+        setMonthlyStats(teamStatsData?.[0] || {})
+        
+        // Get current equity from clients
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('overall_margin, margin_in, is_new_client')
+        if (clientsError) throw clientsError
+        
+        const totalCurrentEquity = (clientsData || []).reduce((sum, c) => sum + (c.overall_margin || 0), 0)
+        setCurrentEquity(totalCurrentEquity)
+        
+        // Calculate base equity (current - new deposits - margin additions + withdrawals)
+        const newDeposits = cashFlowData?.total_new_deposits || 0
+        const marginAdditions = cashFlowData?.total_margin_additions || 0
+        const totalWithdrawals = cashFlowData?.total_withdrawals || 0
+        const calculatedBaseEquity = totalCurrentEquity - newDeposits - marginAdditions + totalWithdrawals
+        setBaseEquity(calculatedBaseEquity)
       } catch (error) {
-        console.error("Failed to fetch metrics:", error);
+        console.error("Failed to fetch metrics:", error)
       }
-    };
+    }
 
-    fetchMetrics();
-  }, []);
-
-  // Normalize API target shape (supports row or [row])
-  const equityTarget = useMemo(() => {
-    if (!equityTargetRaw) return null;
-    return Array.isArray(equityTargetRaw) ? equityTargetRaw[0] : equityTargetRaw;
-  }, [equityTargetRaw]);
+    fetchMetrics()
+  }, [selectedMonth, selectedYear, getCashFlowMetricsForMonth])
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PK", {
@@ -79,53 +86,58 @@ export default function Analytics() {
   const formatDecimal = (value: number, decimals: number = 2) =>
     Number(value ?? 0).toFixed(decimals);
 
-  // ---------- Aggregations ----------
+  // Calculate targets and remaining days
   const analytics = useMemo(() => {
-    // Use cash flow metrics from the database function
-    const newDeposits = cashFlowMetrics?.total_new_deposits || 0;
-    const marginIn = cashFlowMetrics?.total_margin_additions || 0;
-    const totalWithdrawals = cashFlowMetrics?.total_withdrawals || 0;
+    const newDeposits = cashFlowMetrics?.total_new_deposits || 0
+    const marginIn = cashFlowMetrics?.total_margin_additions || 0
+    const totalWithdrawals = cashFlowMetrics?.total_withdrawals || 0
 
     const commission = transactions
-      .filter((t) => t.transaction_type === "commission")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => t.transaction_type === "commission")
+      .reduce((sum, t) => sum + t.amount, 0)
 
     const totalNOTs = transactions
-      .filter((t) => t.transaction_type === "commission")
-      .reduce((sum, t) => sum + (t.nots_generated || 0), 0);
+      .filter(t => t.transaction_type === "commission")
+      .reduce((sum, t) => sum + (t.nots_generated || 0), 0)
 
-    const workingDays = dailyNOTs.filter((d) => d.working_day).length;
+    const workingDays = dailyNOTs.filter(d => d.working_day).length
+    
+    // Calculate targets based on base equity
+    const monthlyTargetNOTs = (baseEquity * 0.18) / NOT_DENOMINATOR
+    const dailyTargetNOTs = workingDays > 0 ? monthlyTargetNOTs / workingDays : 0
 
     const bestDay = dailyNOTs.reduce(
-      (best: any, current: any) =>
-        current.total_nots_achieved > (best?.total_nots_achieved || 0)
+      (best, current) =>
+        (current.total_nots_achieved || 0) > (best?.total_nots_achieved || 0)
           ? current
           : best,
-      null as any
-    );
+      null
+    )
 
     const dailyAvgNOTs =
       dailyNOTs.length > 0
-        ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) /
-          dailyNOTs.length
-        : 0;
+        ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) / dailyNOTs.length
+        : 0
 
-    // Calculate remaining days and required daily average
-    const today = new Date();
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const remainingWorkingDays = (() => {
-      let wd = 0;
-      const current = new Date(today);
+    // Calculate remaining days and required daily average (only for current month)
+    const today = new Date()
+    const isCurrentMonth = selectedMonth === (today.getMonth() + 1) && selectedYear === today.getFullYear()
+    const remainingWorkingDays = isCurrentMonth ? (() => {
+      let wd = 0
+      const current = new Date(today)
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
       while (current <= lastDayOfMonth) {
-        const dayOfWeek = current.getDay();
+        const dayOfWeek = current.getDay()
         if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          // Not Sunday or Saturday
-          wd++;
+          wd++
         }
-        current.setDate(current.getDate() + 1);
+        current.setDate(current.getDate() + 1)
       }
-      return wd;
-    })();
+      return wd
+    })() : 0
+    
+    const remainingNOTs = Math.max(0, monthlyTargetNOTs - totalNOTs)
+    const requiredDailyAvg = remainingWorkingDays > 0 ? remainingNOTs / remainingWorkingDays : 0
 
     return {
       newDeposits,
@@ -133,36 +145,21 @@ export default function Analytics() {
       totalCommission: commission,
       totalWithdrawals,
       totalNOTs,
+      monthlyTargetNOTs,
+      dailyTargetNOTs,
       dailyAvgNOTs,
       workingDays,
       bestDay,
       remainingWorkingDays,
-    };
-  }, [transactions, dailyNOTs, cashFlowMetrics]);
+      remainingNOTs,
+      requiredDailyAvg,
+      isCurrentMonth,
+    }
+  }, [transactions, dailyNOTs, cashFlowMetrics, baseEquity, selectedMonth, selectedYear])
 
-  // ---------- Targets (prefer API, fallback to formula) ----------
-  const monthlyTargetNOTs = useMemo(() => {
-    // Use base equity from monthly stats
-    const baseEquity = equityTarget?.base_equity || equityTarget?.current_equity || 0;
-
-    // Correct NOTs calculation: (base_equity * 18%) / 6000
-    return (baseEquity * 0.18) / NOT_DENOMINATOR;
-  }, [equityTarget]);
-
-  const dailyTargetNOTs = useMemo(() => {
-    // Assume 22 working days per month
-    return monthlyTargetNOTs / 22;
-  }, [monthlyTargetNOTs]);
-
-  const remainingTargetNOTs = Math.max(0, monthlyTargetNOTs - analytics.totalNOTs);
-  const requiredDailyAvg =
-    analytics.remainingWorkingDays > 0
-      ? remainingTargetNOTs / analytics.remainingWorkingDays
-      : 0;
-
-  const progressPercentage =
-    monthlyTargetNOTs > 0 ? (analytics.totalNOTs / monthlyTargetNOTs) * 100 : 0;
-
+  const progressPercentage = analytics.monthlyTargetNOTs > 0 
+    ? (analytics.totalNOTs / analytics.monthlyTargetNOTs) * 100 
+    : 0
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -174,33 +171,12 @@ export default function Analytics() {
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-[260px] justify-start text-left font-normal"
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(dateRange.from, "LLL dd, y")} -{" "}
-                {format(dateRange.to, "LLL dd, y")}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                initialFocus
-                mode="range"
-                defaultMonth={dateRange.from}
-                selected={dateRange}
-                onSelect={(range) => {
-                  if (range?.from && range?.to) {
-                    setDateRange({ from: range.from, to: range.to });
-                  }
-                }}
-                numberOfMonths={2}
-              />
-            </PopoverContent>
-          </Popover>
+        <div className="flex items-center gap-2">
+          <MonthYearPicker
+            month={selectedMonth}
+            year={selectedYear}
+            onMonthYearChange={handleMonthYearChange}
+          />
         </div>
       </div>
 
@@ -216,7 +192,7 @@ export default function Analytics() {
               {formatDecimal(analytics.totalNOTs)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target (base equity): {formatDecimal(monthlyTargetNOTs)}
+              Target: {formatDecimal(analytics.monthlyTargetNOTs)}
             </p>
           </CardContent>
         </Card>
@@ -240,34 +216,32 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
+        {/* Three cash flow categories as requested */}
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Deposits (margin_in)</CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-trading-profit" />
+            <CardTitle className="text-sm font-medium">New Deposits</CardTitle>
+            <Plus className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
               {formatCurrency(analytics.newDeposits)}
             </div>
-            <p className="text-xs text-muted-foreground">Stored in margin_in column</p>
+            <p className="text-xs text-muted-foreground">From new clients</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Additional Margin</CardTitle>
-            <Plus className="h-4 w-4 text-trading-profit" />
+            <CardTitle className="text-sm font-medium">Margin In (Deposits)</CardTitle>
+            <ArrowUpRight className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
               {formatCurrency(analytics.marginIn)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Additional margin from existing clients
-            </p>
+            <p className="text-xs text-muted-foreground">From existing clients</p>
           </CardContent>
         </Card>
-
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Withdrawals</CardTitle>
@@ -288,7 +262,7 @@ export default function Analytics() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Monthly Progress (Base Equity Method)
+              CS Falcons Monthly Progress
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -296,7 +270,7 @@ export default function Analytics() {
               <div className="flex justify-between text-sm">
                 <span>Progress</span>
                 <span className="font-medium">
-                  {formatDecimal(analytics.totalNOTs)} / {formatDecimal(monthlyTargetNOTs)}
+                  {formatDecimal(analytics.totalNOTs)} / {formatDecimal(analytics.monthlyTargetNOTs)}
                 </span>
               </div>
               <div className="w-full bg-secondary rounded-full h-2">
@@ -312,20 +286,15 @@ export default function Analytics() {
 
             <div className="pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Base Equity (targets):</span>
+                <span className="text-muted-foreground">Base Equity (for targets):</span>
                 <span className="font-medium">
-                  {formatCurrency(
-                    (equityTarget?.total_equity || 0) -
-                      analytics.newDeposits -
-                      analytics.marginIn +
-                      analytics.totalWithdrawals
-                  )}
+                  {formatCurrency(baseEquity)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Current Equity:</span>
                 <span className="font-medium">
-                  {formatCurrency(equityTarget?.total_equity || 0)}
+                  {formatCurrency(currentEquity)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -335,8 +304,29 @@ export default function Analytics() {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Remaining NOTs:</span>
                 <span className="font-medium">
-                  {formatDecimal(Math.max(0, monthlyTargetNOTs - analytics.totalNOTs))}
+                  {formatDecimal(analytics.remainingNOTs)}
                 </span>
+              </div>
+              
+              {/* Show remaining days info only for current month */}
+              {analytics.isCurrentMonth && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Remaining working days:</span>
+                    <span className="font-medium">{analytics.remainingWorkingDays}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Required daily avg:</span>
+                    <span className="font-medium text-warning">
+                      {formatDecimal(analytics.requiredDailyAvg)} NOTs
+                    </span>
+                  </div>
+                </>
+              )}
+              
+              <div className="flex justify-between text-sm pt-2 border-t border-border">
+                <span className="text-muted-foreground">Target formula:</span>
+                <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
               </div>
             </div>
           </CardContent>
@@ -345,8 +335,8 @@ export default function Analytics() {
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5" />
-              Performance Highlights
+              <Clock className="h-5 w-5" />
+              CS Falcons Performance Summary
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -356,7 +346,7 @@ export default function Analytics() {
                   <p className="font-medium">Best Day</p>
                   <p className="text-sm text-muted-foreground">
                     {analytics.bestDay
-                      ? format(new Date(analytics.bestDay.tracking_date), "MMM dd")
+                      ? new Date(analytics.bestDay.tracking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                       : "N/A"}
                   </p>
                 </div>
@@ -368,68 +358,46 @@ export default function Analytics() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 border border-border rounded-lg bg-trading-profit/5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Plus className="h-4 w-4 text-trading-profit" />
-                    <span className="text-sm font-medium">New Deposits</span>
-                  </div>
-                  <p className="text-lg font-bold text-trading-profit">
-                    {formatCurrency(analytics.newDeposits)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">New clients</p>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Daily Target:</span>
+                  <span className="font-medium">{formatDecimal(analytics.dailyTargetNOTs)} NOTs</span>
                 </div>
-
-                <div className="p-3 border border-border rounded-lg bg-trading-profit/5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ArrowUpRight className="h-4 w-4 text-trading-profit" />
-                    <span className="text-sm font-medium">Margin In</span>
-                  </div>
-                  <p className="text-lg font-bold text-trading-profit">
-                    {formatCurrency(analytics.marginIn)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Existing clients</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Daily Average:</span>
+                  <span className="font-medium">{formatDecimal(analytics.dailyAvgNOTs)} NOTs</span>
                 </div>
-
-                <div className="p-3 border border-border rounded-lg bg-trading-loss/5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ArrowDownRight className="h-4 w-4 text-trading-loss" />
-                    <span className="text-sm font-medium">Withdrawals</span>
-                  </div>
-                  <p className="text-lg font-bold text-trading-loss">
-                    {formatCurrency(analytics.totalWithdrawals)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">All withdrawals</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Working Days:</span>
+                  <span className="font-medium">{analytics.workingDays}</span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-border space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Remaining working days:</span>
-                  <span className="font-medium">{analytics.remainingWorkingDays}</span>
+              {/* Show remaining time info only for current month */}
+              {analytics.isCurrentMonth && (
+                <div className="pt-2 border-t border-border space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Remaining Time</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Working days left:</span>
+                    <span className="font-medium">{analytics.remainingWorkingDays}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Required daily avg:</span>
+                    <span className="font-medium text-warning">
+                      {formatDecimal(analytics.requiredDailyAvg)} NOTs
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Required daily avg:</span>
-                  <span className="font-medium text-warning">
-                    {formatDecimal(requiredDailyAvg)} NOTs
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-border">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Retention Rate:</span>
-                  <span className="font-medium text-trading-profit">
-                    {formatDecimal(retentionMetrics?.retention_rate || 0)}%
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Daily Performance (base equity targets vs achieved) */}
+      {/* Recent Daily Performance */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -441,8 +409,7 @@ export default function Analytics() {
           <div className="space-y-3">
             {dailyNOTs.slice(0, 10).map((day: any, i: number) => {
               const achieved = day.total_nots_achieved || 0;
-              // Use base equity daily target for each working day; zero for weekends
-              const targetForDay = day.working_day ? dailyTargetNOTs : 0;
+              const targetForDay = day.working_day ? analytics.dailyTargetNOTs : 0;
               const delta = achieved - targetForDay;
               const met = achieved >= targetForDay && day.working_day;
 
@@ -451,14 +418,18 @@ export default function Analytics() {
                   key={day.tracking_date ?? day.id ?? i}
                   className="p-3 rounded-md border border-border space-y-3"
                 >
-                  {/* Header row: base equity */}
+                  {/* Header row: date and status */}
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">
-                      Base equity (for targets):
+                    <span className="font-medium">
+                      {new Date(day.tracking_date).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
                     </span>
-                    <div className="flex items-center gap-3">
-                      {formatCurrency(equityTarget?.base_equity || 0)}
-                    </div>
+                    <Badge variant={day.working_day ? "default" : "secondary"}>
+                      {day.working_day ? "Working Day" : "Weekend"}
+                    </Badge>
                   </div>
 
                   {/* Metrics row */}
@@ -516,25 +487,17 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  {/* Current equity row */}
+                  {/* Commission row */}
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Current equity:</span>
-                    <span>{formatCurrency(equityTarget?.current_equity || 0)}</span>
-                  </div>
-
-                  {/* Footer: formula */}
-                  <div className="flex justify-between text-sm pt-2 border-t border-border">
-                    <span className="text-muted-foreground">Target formula:</span>
-                    <span className="font-mono text-xs">
-                      (Base Equity × 18%) ÷ 6000
-                    </span>
+                    <span className="text-muted-foreground">Commission:</span>
+                    <span>{formatCurrency(day.total_commission_pkr || 0)}</span>
                   </div>
                 </div>
-              );
+              )
             })}
           </div>
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

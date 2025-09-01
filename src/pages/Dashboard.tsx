@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MonthlyResetForm } from "@/components/MonthlyResetForm";
+import { MonthYearPicker } from "@/components/MonthYearPicker";
 import {
   Users,
   TrendingUp,
@@ -13,23 +15,33 @@ import {
   ArrowDownRight,
   Activity,
   Minus,
-  Plus
+  Plus,
+  Clock,
+  Calendar
 } from "lucide-react";
 import { useDashboard, EnhancedDashboardStats } from "@/hooks/useDashboard";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
-  const { stats, retentionMetrics, loading, error } = useDashboard()
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  
+  const { stats, retentionMetrics, loading, error } = useDashboard(selectedMonth, selectedYear)
 
-  // Calculate remaining days in month
+  const handleMonthYearChange = (month: number, year: number) => {
+    setSelectedMonth(month)
+    setSelectedYear(year)
+  }
+
+  // Calculate remaining days in month (only for current month)
   const today = new Date()
-  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-  const remainingDays = Math.max(0, Math.ceil((lastDayOfMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
+  const isCurrentMonth = selectedMonth === (today.getMonth() + 1) && selectedYear === today.getFullYear()
   
   // Calculate remaining working days (exclude weekends)
-  const remainingWorkingDays = (() => {
+  const remainingWorkingDays = isCurrentMonth ? (() => {
     let workingDays = 0
     const current = new Date(today)
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
     while (current <= lastDayOfMonth) {
       const dayOfWeek = current.getDay()
       if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
@@ -38,7 +50,7 @@ export default function Dashboard() {
       current.setDate(current.getDate() + 1)
     }
     return workingDays
-  })()
+  })() : 0
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PK", {
@@ -107,11 +119,21 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">CS Falcons Dashboard</h1>
-        <p className="text-muted-foreground">
-          Monitor CS Falcons team trading performance and client management metrics
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">CS Falcons Dashboard</h1>
+          <p className="text-muted-foreground">
+            Monitor CS Falcons team trading performance and client management metrics
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <MonthYearPicker
+            month={selectedMonth}
+            year={selectedYear}
+            onMonthYearChange={handleMonthYearChange}
+          />
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -183,7 +205,8 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Today's Activity & Flow Tracking */}
+      {/* Today's Activity & Flow Tracking (only show for current month) */}
+      {isCurrentMonth && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* Today's NOTs -> /analytics */}
         <Link to="/analytics" className={clickableWrap} aria-label="Go to Analytics (Today’s NOTs)">
@@ -267,6 +290,7 @@ export default function Dashboard() {
           </Card>
         </Link>
       </div>
+      )}
 
       {/* Performance Overview */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -317,11 +341,15 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Remaining working days:</span>
-                    <span className="font-medium">{remainingWorkingDays}</span>
+                    <span className="font-medium">
+                      {isCurrentMonth ? remainingWorkingDays : 'N/A (Historical)'}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Required daily avg:</span>
-                    <span className="font-medium text-warning">{formatDecimal(requiredDailyAvg)}</span>
+                    <span className="font-medium text-warning">
+                      {isCurrentMonth ? `${formatDecimal(requiredDailyAvg)} NOTs` : 'N/A (Historical)'}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Daily target:</span>
@@ -336,6 +364,28 @@ export default function Dashboard() {
                     <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
                   </div>
                 </div>
+                
+                {/* Add remaining days info for current month */}
+                {isCurrentMonth && (
+                  <div className="pt-4 border-t border-border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Remaining Time</span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Working days left:</span>
+                        <span className="font-medium">{remainingWorkingDays}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">NOTs needed:</span>
+                        <span className="font-medium text-warning">
+                          {formatDecimal(Math.max(0, monthlyTargetNots - currentNots))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

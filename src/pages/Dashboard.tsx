@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { MonthlyResetForm } from "@/components/MonthlyResetForm";
 import {
   Users,
   TrendingUp,
@@ -72,6 +73,8 @@ export default function Dashboard() {
             Error loading dashboard data. Please check your database connection.
           </p>
         </div>
+        
+        <MonthlyResetForm onSuccess={() => window.location.reload()} />
       </div>
     );
   }
@@ -96,7 +99,6 @@ export default function Dashboard() {
   
   // Calculate required daily average for remaining days
   const requiredDailyAvg = remainingWorkingDays > 0 ? remainingNots / remainingWorkingDays : 0;
-  // ------------------------------------------------------------------
 
   // Small helper to give clickable cards a consistent interaction affordance
   const clickableCard = "transition-shadow hover:shadow-md focus-visible:shadow-md";
@@ -302,7 +304,7 @@ export default function Dashboard() {
                     <span className="font-medium">{formatCurrency(currentEquity)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">New deposits (margin_in):</span>
+                    <span className="text-muted-foreground">Total margin in:</span>
                     <span className="font-medium text-trading-profit">{formatCurrency(totalMarginIn)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -328,6 +330,10 @@ export default function Dashboard() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Weekly target:</span>
                     <span className="font-medium">{formatDecimal(weeklyTargetNots)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2 border-t border-border">
+                    <span className="text-muted-foreground">Monthly target formula:</span>
+                    <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
                   </div>
                 </div>
               </div>

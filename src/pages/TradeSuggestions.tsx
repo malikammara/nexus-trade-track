@@ -65,14 +65,15 @@ interface ClientPlan {
 export default function TradeSuggestions() {
   const { clients, loading: clientsLoading } = useClients();
   const { products, loading: productsLoading } = useProducts();
+  const { getCurrentMonthStats } = useMonthlyReset();
 
   const [usdToPkr, setUsdToPkr] = useState(283);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // RPC target (same as Dashboard)
+  // Monthly stats with base equity
   const [orgDailyTargetNOTs, setOrgDailyTargetNOTs] = useState(0);
-  const [totalEquity, setTotalEquity] = useState(0);
   const [baseEquity, setBaseEquity] = useState(0);
+  const [totalEquity, setTotalEquity] = useState(0);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,34 +81,25 @@ export default function TradeSuggestions() {
       try {
         setApiError(null);
         
-        // Get current equity and transactions to calculate base equity
-        const [{ data: targetData, error: targetError }, { data: transactionData, error: transactionError }] = await Promise.all([
-          supabase.rpc("calculate_equity_based_target"),
-          supabase.from('daily_transactions').select('transaction_type, amount')
-        ]);
+        // Get monthly stats with proper base equity
+        const monthlyStats = await getCurrentMonthStats();
         
-        if (targetError) throw targetError;
-        if (transactionError) throw transactionError;
-        
-        const row = Array.isArray(targetData) ? targetData[0] : targetData;
-        const currentEquity = row?.total_equity ?? 0;
-        
-        // Calculate base equity (current - margin_in + withdrawals)
-        const totalMarginIn = (transactionData || [])
-          .filter(t => t.transaction_type === 'margin_add')
-          .reduce((sum, t) => sum + (t.amount || 0), 0);
-        
-        const totalWithdrawals = (transactionData || [])
-          .filter(t => t.transaction_type === 'withdrawal')
-          .reduce((sum, t) => sum + (t.amount || 0), 0);
-        
-        const calculatedBaseEquity = currentEquity - totalMarginIn + totalWithdrawals;
+        const currentEquity = monthlyStats?.current_equity || 0;
+        const baseEquityAmount = monthlyStats?.base_equity || currentEquity;
         
         setTotalEquity(currentEquity);
-        setBaseEquity(calculatedBaseEquity);
+        setBaseEquity(baseEquityAmount);
         
-        // Use base equity for target calculation
-        setOrgDailyTargetNOTs((calculatedBaseEquity * 0.18) / 22 / NOT_DENOMINATOR);
+        // Calculate working days for current month
+        const { data: workingDaysData } = await supabase.rpc('get_working_days_in_month', {
+          target_year: new Date().getFullYear(),
+          target_month: new Date().getMonth() + 1
+        });
+        
+        const workingDays = workingDaysData || 22;
+        
+        // Calculate daily target NOTs: (base_equity * 18%) / 6000 / working_days
+        setOrgDailyTargetNOTs((baseEquityAmount * 0.18) / NOT_DENOMINATOR / workingDays);
       } catch (e: any) {
         setApiError(e?.message || "Failed to fetch equity-based target");
         setTotalEquity(0);
@@ -116,7 +108,9 @@ export default function TradeSuggestions() {
       }
     };
     run();
-  }, []);
+  }, [getCurrentMonthStats]);
+
+  const { getCurrentMonthStats } = useMonthlyReset();
 
   // -------- robust product picking (aliases + fallbacks) --------
   const pick = useMemo(() => {

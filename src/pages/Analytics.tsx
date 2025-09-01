@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { useDailyTransactions } from "@/hooks/useDailyTransactions";
+import { useMonthlyReset } from "@/hooks/useMonthlyReset";
 
 const NOT_DENOMINATOR = 6000;
 
@@ -35,6 +36,7 @@ export default function Analytics() {
     getRetentionMetrics,
     loading 
   } = useDailyTransactions();
+  const { getCurrentMonthStats } = useMonthlyReset();
   
   const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
   const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
@@ -43,12 +45,12 @@ export default function Analytics() {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [targetData, retentionData, cashFlowData] = await Promise.all([
-          getEquityBasedTarget(),
+        const [monthlyStats, retentionData, cashFlowData] = await Promise.all([
+          getCurrentMonthStats(),
           getRetentionMetrics(30),
           getCashFlowMetrics()
         ]);
-        setEquityTargetRaw(targetData);
+        setEquityTargetRaw(monthlyStats);
         setRetentionMetrics(retentionData);
         setCashFlowMetrics(cashFlowData);
       } catch (error) {
@@ -133,16 +135,15 @@ export default function Analytics() {
 
   // ---------- Targets (prefer API, fallback to formula) ----------
   const monthlyTargetNOTs = useMemo(() => {
-    // Calculate base equity (excluding new deposits and margin-in, adding back withdrawals)
-    const currentEquity = equityTarget?.total_equity || 0;
-    const baseEquity = currentEquity - analytics.newDeposits - analytics.marginIn + analytics.totalWithdrawals;
+    // Use base equity from monthly stats
+    const baseEquity = equityTarget?.base_equity || equityTarget?.current_equity || 0;
     
-    // Use base equity for target calculation (18% of base equity)
+    // Correct NOTs calculation: (base_equity * 18%) / 6000
     return (baseEquity * 0.18) / NOT_DENOMINATOR;
   }, [equityTarget, analytics]);
 
   const dailyTargetNOTs = useMemo(() => {
-    // Use base equity calculation, assume 22 working days
+    // Assume 22 working days per month
     return monthlyTargetNOTs / 22;
   }, [monthlyTargetNOTs]);
 
@@ -431,14 +432,9 @@ export default function Analytics() {
               const met = achieved >= targetForDay && day.working_day;
 
               return (
-                <div key={day.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                  <span className="text-muted-foreground">Base equity (for targets):</span>
                   <div className="flex items-center gap-3">
-                    <div className="text-sm font-medium">
-                      {format(new Date(day.tracking_date), "MMM dd, yyyy")}
-                    </div>
-                    {!day.working_day && (
-                      <Badge variant="secondary" className="text-xs">Weekend</Badge>
-                    )}
+                    {formatCurrency(equityTarget?.base_equity || 0)}
                   </div>
 
                   <div className="flex items-center gap-6">
@@ -476,8 +472,12 @@ export default function Analytics() {
                           }}
                         />
                       </div>
-                    </div>
+                    {formatCurrency(equityTarget?.current_equity || 0)}
                   </div>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t border-border">
+                  <span className="text-muted-foreground">Target formula:</span>
+                  <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
                 </div>
               );
             })}

@@ -1,13 +1,14 @@
+// src/pages/Analytics.tsx
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { 
+import {
   Calendar as CalendarIcon,
-  TrendingUp, 
-  Target, 
+  TrendingUp,
+  Target,
   Award,
   DollarSign,
   BarChart3,
@@ -22,22 +23,22 @@ import { useMonthlyReset } from "@/hooks/useMonthlyReset";
 const NOT_DENOMINATOR = 6000;
 
 export default function Analytics() {
-  const [dateRange, setDateRange] = useState<{from: Date, to: Date}>({
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: startOfMonth(new Date()),
-    to: endOfMonth(new Date())
+    to: endOfMonth(new Date()),
   });
-  
-  const { 
-    transactions, 
-    dailyNOTs, 
+
+  const {
+    transactions,
+    dailyNOTs,
     getCashFlowMetrics,
     resetNewClientStatus,
-    getEquityBasedTarget, 
+    getEquityBasedTarget,
     getRetentionMetrics,
-    loading 
+    loading,
   } = useDailyTransactions();
   const { getCurrentMonthStats } = useMonthlyReset();
-  
+
   const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
   const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
   const [cashFlowMetrics, setCashFlowMetrics] = useState<any>(null);
@@ -48,7 +49,7 @@ export default function Analytics() {
         const [monthlyStats, retentionData, cashFlowData] = await Promise.all([
           getCurrentMonthStats(),
           getRetentionMetrics(30),
-          getCashFlowMetrics()
+          getCashFlowMetrics(),
         ]);
         setEquityTargetRaw(monthlyStats);
         setRetentionMetrics(retentionData);
@@ -86,39 +87,45 @@ export default function Analytics() {
     const totalWithdrawals = cashFlowMetrics?.total_withdrawals || 0;
 
     const commission = transactions
-      .filter(t => t.transaction_type === "commission")
+      .filter((t) => t.transaction_type === "commission")
       .reduce((sum, t) => sum + t.amount, 0);
 
-
     const totalNOTs = transactions
-      .filter(t => t.transaction_type === "commission")
+      .filter((t) => t.transaction_type === "commission")
       .reduce((sum, t) => sum + (t.nots_generated || 0), 0);
 
-    const workingDays = dailyNOTs.filter(d => d.working_day).length;
+    const workingDays = dailyNOTs.filter((d) => d.working_day).length;
 
-    const bestDay = dailyNOTs.reduce((best: any, current: any) =>
-      current.total_nots_achieved > (best?.total_nots_achieved || 0) ? current : best, null as any
+    const bestDay = dailyNOTs.reduce(
+      (best: any, current: any) =>
+        current.total_nots_achieved > (best?.total_nots_achieved || 0)
+          ? current
+          : best,
+      null as any
     );
 
-    const dailyAvgNOTs = dailyNOTs.length > 0
-      ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) / dailyNOTs.length
-      : 0;
+    const dailyAvgNOTs =
+      dailyNOTs.length > 0
+        ? dailyNOTs.reduce((sum, d) => sum + (d.total_nots_achieved || 0), 0) /
+          dailyNOTs.length
+        : 0;
 
     // Calculate remaining days and required daily average
-    const today = new Date()
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    const today = new Date();
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     const remainingWorkingDays = (() => {
-      let workingDays = 0
-      const current = new Date(today)
+      let wd = 0;
+      const current = new Date(today);
       while (current <= lastDayOfMonth) {
-        const dayOfWeek = current.getDay()
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
-          workingDays++
+        const dayOfWeek = current.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          // Not Sunday or Saturday
+          wd++;
         }
-        current.setDate(current.getDate() + 1)
+        current.setDate(current.getDate() + 1);
       }
-      return workingDays
-    })()
+      return wd;
+    })();
 
     return {
       newDeposits,
@@ -129,7 +136,7 @@ export default function Analytics() {
       dailyAvgNOTs,
       workingDays,
       bestDay,
-      remainingWorkingDays
+      remainingWorkingDays,
     };
   }, [transactions, dailyNOTs, cashFlowMetrics]);
 
@@ -137,10 +144,10 @@ export default function Analytics() {
   const monthlyTargetNOTs = useMemo(() => {
     // Use base equity from monthly stats
     const baseEquity = equityTarget?.base_equity || equityTarget?.current_equity || 0;
-    
+
     // Correct NOTs calculation: (base_equity * 18%) / 6000
     return (baseEquity * 0.18) / NOT_DENOMINATOR;
-  }, [equityTarget, analytics]);
+  }, [equityTarget]);
 
   const dailyTargetNOTs = useMemo(() => {
     // Assume 22 working days per month
@@ -148,11 +155,13 @@ export default function Analytics() {
   }, [monthlyTargetNOTs]);
 
   const remainingTargetNOTs = Math.max(0, monthlyTargetNOTs - analytics.totalNOTs);
-  const requiredDailyAvg = analytics.remainingWorkingDays > 0 ? remainingTargetNOTs / analytics.remainingWorkingDays : 0;
+  const requiredDailyAvg =
+    analytics.remainingWorkingDays > 0
+      ? remainingTargetNOTs / analytics.remainingWorkingDays
+      : 0;
 
-  const progressPercentage = monthlyTargetNOTs > 0
-    ? (analytics.totalNOTs / monthlyTargetNOTs) * 100
-    : 0;
+  const progressPercentage =
+    monthlyTargetNOTs > 0 ? (analytics.totalNOTs / monthlyTargetNOTs) * 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -168,9 +177,13 @@ export default function Analytics() {
         <div className="flex gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+              <Button
+                variant="outline"
+                className="w-[260px] justify-start text-left font-normal"
+              >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                {format(dateRange.from, "LLL dd, y")} -{" "}
+                {format(dateRange.to, "LLL dd, y")}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
@@ -218,7 +231,11 @@ export default function Analytics() {
               {formatCurrency(analytics.totalCommission)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Avg: {formatCurrency(analytics.totalCommission / Math.max(analytics.workingDays, 1))} per day
+              Avg:{" "}
+              {formatCurrency(
+                analytics.totalCommission / Math.max(analytics.workingDays, 1)
+              )}{" "}
+              per day
             </p>
           </CardContent>
         </Card>
@@ -232,9 +249,7 @@ export default function Analytics() {
             <div className="text-2xl font-bold text-trading-profit">
               {formatCurrency(analytics.newDeposits)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Stored in margin_in column
-            </p>
+            <p className="text-xs text-muted-foreground">Stored in margin_in column</p>
           </CardContent>
         </Card>
 
@@ -262,9 +277,7 @@ export default function Analytics() {
             <div className="text-2xl font-bold text-trading-loss">
               {formatCurrency(analytics.totalWithdrawals)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Total client withdrawals
-            </p>
+            <p className="text-xs text-muted-foreground">Total client withdrawals</p>
           </CardContent>
         </Card>
       </div>
@@ -287,7 +300,7 @@ export default function Analytics() {
                 </span>
               </div>
               <div className="w-full bg-secondary rounded-full h-2">
-                <div 
+                <div
                   className="bg-trading-profit h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(progressPercentage, 100)}%` }}
                 />
@@ -296,16 +309,16 @@ export default function Analytics() {
                 {formatDecimal(progressPercentage)}% of monthly target achieved
               </p>
             </div>
-            
+
             <div className="pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Base Equity (targets):</span>
                 <span className="font-medium">
                   {formatCurrency(
-                    (equityTarget?.total_equity || 0)
-                    - analytics.newDeposits
-                    - analytics.marginIn
-                    + analytics.totalWithdrawals
+                    (equityTarget?.total_equity || 0) -
+                      analytics.newDeposits -
+                      analytics.marginIn +
+                      analytics.totalWithdrawals
                   )}
                 </span>
               </div>
@@ -342,7 +355,9 @@ export default function Analytics() {
                 <div>
                   <p className="font-medium">Best Day</p>
                   <p className="text-sm text-muted-foreground">
-                    {analytics.bestDay ? format(new Date(analytics.bestDay.tracking_date), "MMM dd") : "N/A"}
+                    {analytics.bestDay
+                      ? format(new Date(analytics.bestDay.tracking_date), "MMM dd")
+                      : "N/A"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -424,7 +439,7 @@ export default function Analytics() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {dailyNOTs.slice(0, 10).map((day: any) => {
+            {dailyNOTs.slice(0, 10).map((day: any, i: number) => {
               const achieved = day.total_nots_achieved || 0;
               // Use base equity daily target for each working day; zero for weekends
               const targetForDay = day.working_day ? dailyTargetNOTs : 0;
@@ -432,11 +447,21 @@ export default function Analytics() {
               const met = achieved >= targetForDay && day.working_day;
 
               return (
-                  <span className="text-muted-foreground">Base equity (for targets):</span>
-                  <div className="flex items-center gap-3">
-                    {formatCurrency(equityTarget?.base_equity || 0)}
+                <div
+                  key={day.tracking_date ?? day.id ?? i}
+                  className="p-3 rounded-md border border-border space-y-3"
+                >
+                  {/* Header row: base equity */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Base equity (for targets):
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {formatCurrency(equityTarget?.base_equity || 0)}
+                    </div>
                   </div>
 
+                  {/* Metrics row */}
                   <div className="flex items-center gap-6">
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Target (NOTs)</p>
@@ -444,7 +469,7 @@ export default function Analytics() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Achieved (NOTs)</p>
-                      <p className={`font-bold ${met ? 'text-trading-profit' : ''}`}>
+                      <p className={`font-bold ${met ? "text-trading-profit" : ""}`}>
                         {formatDecimal(achieved)}
                       </p>
                     </div>
@@ -452,11 +477,22 @@ export default function Analytics() {
                       <p className="text-xs text-muted-foreground">Delta</p>
                       <div className="flex items-center justify-end gap-1">
                         {met ? (
-                          <Badge variant="default" className="bg-trading-profit text-white">Met</Badge>
+                          <Badge
+                            variant="default"
+                            className="bg-trading-profit text-white"
+                          >
+                            Met
+                          </Badge>
                         ) : (
                           <Badge variant="destructive">Shortfall</Badge>
                         )}
-                        <span className={met ? "text-trading-profit font-medium" : "text-trading-loss font-medium"}>
+                        <span
+                          className={
+                            met
+                              ? "text-trading-profit font-medium"
+                              : "text-trading-loss font-medium"
+                          }
+                        >
                           {delta >= 0 ? "+" : ""}
                           {formatDecimal(delta)}
                         </span>
@@ -466,18 +502,33 @@ export default function Analytics() {
                       {/* tiny inline progress bar for the day */}
                       <div className="w-full bg-secondary rounded-full h-2">
                         <div
-                          className={`h-2 rounded-full ${met ? "bg-trading-profit" : "bg-trading-loss"}`}
+                          className={`h-2 rounded-full ${
+                            met ? "bg-trading-profit" : "bg-trading-loss"
+                          }`}
                           style={{
-                            width: `${Math.min(100, targetForDay > 0 ? (achieved / targetForDay) * 100 : 0)}%`,
+                            width: `${Math.min(
+                              100,
+                              targetForDay > 0 ? (achieved / targetForDay) * 100 : 0
+                            )}%`,
                           }}
                         />
                       </div>
-                    {formatCurrency(equityTarget?.current_equity || 0)}
+                    </div>
                   </div>
-                </div>
-                <div className="flex justify-between text-sm pt-2 border-t border-border">
-                  <span className="text-muted-foreground">Target formula:</span>
-                  <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
+
+                  {/* Current equity row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Current equity:</span>
+                    <span>{formatCurrency(equityTarget?.current_equity || 0)}</span>
+                  </div>
+
+                  {/* Footer: formula */}
+                  <div className="flex justify-between text-sm pt-2 border-t border-border">
+                    <span className="text-muted-foreground">Target formula:</span>
+                    <span className="font-mono text-xs">
+                      (Base Equity × 18%) ÷ 6000
+                    </span>
+                  </div>
                 </div>
               );
             })}

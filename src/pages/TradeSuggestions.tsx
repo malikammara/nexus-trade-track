@@ -1,3 +1,4 @@
+// src/pages/TradeSuggestions.tsx
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Target, Calculator, DollarSign, Search, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
+import { useMonthlyReset } from "@/hooks/useMonthlyReset";  // ✅ add import
 import { Client, Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -65,7 +67,7 @@ interface ClientPlan {
 export default function TradeSuggestions() {
   const { clients, loading: clientsLoading } = useClients();
   const { products, loading: productsLoading } = useProducts();
-  const { getCurrentMonthStats } = useMonthlyReset();
+  const { getCurrentMonthStats } = useMonthlyReset(); // ✅ keep only this one
 
   const [usdToPkr, setUsdToPkr] = useState(283);
   const [searchTerm, setSearchTerm] = useState("");
@@ -80,24 +82,24 @@ export default function TradeSuggestions() {
     const run = async () => {
       try {
         setApiError(null);
-        
+
         // Get monthly stats with proper base equity
         const monthlyStats = await getCurrentMonthStats();
-        
+
         const currentEquity = monthlyStats?.current_equity || 0;
         const baseEquityAmount = monthlyStats?.base_equity || currentEquity;
-        
+
         setTotalEquity(currentEquity);
         setBaseEquity(baseEquityAmount);
-        
+
         // Calculate working days for current month
         const { data: workingDaysData } = await supabase.rpc('get_working_days_in_month', {
           target_year: new Date().getFullYear(),
           target_month: new Date().getMonth() + 1
         });
-        
+
         const workingDays = workingDaysData || 22;
-        
+
         // Calculate daily target NOTs: (base_equity * 18%) / 6000 / working_days
         setOrgDailyTargetNOTs((baseEquityAmount * 0.18) / NOT_DENOMINATOR / workingDays);
       } catch (e: any) {
@@ -110,7 +112,8 @@ export default function TradeSuggestions() {
     run();
   }, [getCurrentMonthStats]);
 
-  const { getCurrentMonthStats } = useMonthlyReset();
+  // ❌ removed the duplicate:
+  // const { getCurrentMonthStats } = useMonthlyReset();
 
   // -------- robust product picking (aliases + fallbacks) --------
   const pick = useMemo(() => {
@@ -454,7 +457,7 @@ export default function TradeSuggestions() {
 
   const plans = useMemo(() => {
     const filtered = clients.filter((c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase())
+      (c.name || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
     return filtered
       .map(buildPlansForClient)

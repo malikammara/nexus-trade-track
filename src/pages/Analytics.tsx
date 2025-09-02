@@ -1,4 +1,3 @@
-// src/pages/Analytics.tsx
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,19 +34,26 @@ export default function Analytics() {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
+
   const monthStart = useMemo(() => startOfMonth(dateRange.from), [dateRange.from]);
   const monthEnd = useMemo(() => endOfMonth(dateRange.to ?? dateRange.from), [
     dateRange.to,
     dateRange.from,
   ]);
 
+  // 👇 derive once; reuse everywhere
+  const selectedMonth = monthStart.getMonth() + 1;
+  const selectedYear = monthStart.getFullYear();
+
   // ── Data sources ────────────────────────────────────────────────────────────
+  // 👇 pass month/year so the hook fetches exactly that month
   const {
     transactions,
     dailyNOTs,
     getCashFlowMetrics,
     getRetentionMetrics,
-  } = useDailyTransactions();
+  } = useDailyTransactions(selectedMonth, selectedYear);
+
   const { getCurrentMonthStats, getMonthlyStats } = useMonthlyReset() as any;
 
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
@@ -57,29 +63,26 @@ export default function Analytics() {
   // ── Stable, guarded fetching (avoids repeated hits in React 18 StrictMode) ──
   const fetchedKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    const key = `${monthStart.toISOString()}_${monthEnd.toISOString()}`;
+    const key = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
     if (fetchedKeyRef.current === key) return; // prevent duplicate re-invocations
-
     fetchedKeyRef.current = key;
 
     const fetchMetrics = async () => {
       try {
-        const selectedMonth = monthStart.getMonth() + 1;
-        const selectedYear = monthStart.getFullYear();
         const isCurrentMonth = isSameMonth(monthStart, new Date());
-        
+
         // Get monthly stats - use current month API for current month, monthly stats for others
-        const statsPromise = isCurrentMonth 
+        const statsPromise = isCurrentMonth
           ? getCurrentMonthStats()
           : getMonthlyStats(selectedMonth, selectedYear);
 
-        const [monthlyStats, retentionData, cashFlowData] = await Promise.all([
+        const [monthlyStatsResult, retentionData, cashFlowData] = await Promise.all([
           statsPromise,
           getRetentionMetrics({ from: monthStart, to: monthEnd }),
           getCashFlowMetrics({ from: monthStart, to: monthEnd }),
         ]);
 
-        setMonthlyStats(monthlyStatsData);
+        setMonthlyStats(monthlyStatsResult); // ✅ fixed typo from original
         setRetentionMetrics(retentionData);
         setCashFlowMetrics(cashFlowData);
       } catch (error) {
@@ -88,7 +91,16 @@ export default function Analytics() {
     };
 
     fetchMetrics();
-  }, [monthStart, monthEnd, getCashFlowMetrics, getRetentionMetrics, getCurrentMonthStats, getMonthlyStats]);
+  }, [
+    selectedMonth,
+    selectedYear,
+    monthStart,
+    monthEnd,
+    getCashFlowMetrics,
+    getRetentionMetrics,
+    getCurrentMonthStats,
+    getMonthlyStats,
+  ]);
 
   // Normalize API stats shape (supports row or [row])
   const equityTarget = useMemo(() => {
@@ -107,7 +119,7 @@ export default function Analytics() {
   const formatDecimal = (value: number, decimals: number = 2) =>
     Number(value ?? 0).toFixed(decimals);
 
-  // ── Filter transactions for selected month ────
+  // ── Filter transactions for selected month (server is scoped; this is a guard) ────
   const txInRange = useMemo(() => {
     return transactions.filter((t: any) => {
       const d = new Date(t.transaction_date ?? t.created_at ?? t.date);
@@ -185,7 +197,7 @@ export default function Analytics() {
 
   const dailyTargetNOTs = useMemo(() => {
     return equityTarget?.daily_target_nots || 0;
-  }, [monthlyTargetNOTs, workingDaysCount]);
+  }, [equityTarget]);
 
   const remainingTargetNOTs = Math.max(0, monthlyTargetNOTs - analytics.totalNOTs);
   const requiredDailyAvg = analytics.remainingWorkingDays > 0
@@ -218,8 +230,10 @@ export default function Analytics() {
                 defaultMonth={monthStart}
                 selected={dateRange}
                 onSelect={(range) => {
-                  if (range?.from && range?.to) {
-                    setDateRange({ from: startOfMonth(range.from), to: endOfMonth(range.to) });
+                  if (range?.from) {
+                    const from = startOfMonth(range.from);
+                    const to = endOfMonth(range.to ?? range.from);
+                    setDateRange({ from, to });
                     fetchedKeyRef.current = null; // force refetch for new month
                   }
                 }}
@@ -486,7 +500,7 @@ export default function Analytics() {
                   {/* Footer: formula */}
                   <div className="flex justify-between text-sm pt-2 border-t border-border">
                     <span className="text-muted-foreground">Target formula:</span>
-                    <span className="font-mono text-xs">(Base Equity × 18%) ÷ 6000</span>
+                    <span className="font-mono text-xs">(Base Equity × 18%) ÷ {NOT_DENOMINATOR}</span>
                   </div>
                 </div>
               );

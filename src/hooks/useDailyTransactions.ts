@@ -48,7 +48,9 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
       // Filter by month/year if provided
       if (month && year) {
         const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
-        const endDate = new Date(year, month, 0).toISOString().split('T')[0] // Last day of month
+        const nextMonth = month === 12 ? 1 : month + 1
+        const nextYear = month === 12 ? year + 1 : year
+        const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`
         query = query.gte('transaction_date', startDate).lte('transaction_date', endDate)
       }
 
@@ -73,7 +75,9 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
       // Filter by month/year if provided
       if (month && year) {
         const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
-        const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+        const nextMonth = month === 12 ? 1 : month + 1
+        const nextYear = month === 12 ? year + 1 : year
+        const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`
         query = query.gte('tracking_date', startDate).lte('tracking_date', endDate)
       } else {
         // Default to last 30 days if no filter
@@ -90,16 +94,39 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
     }
   }
 
-  const getCashFlowMetricsForMonth = async (month: number, year: number) => {
+  const getCashFlowMetrics = async (dateRange?: { from: Date; to: Date }) => {
     try {
-      const { data, error } = await supabase.rpc('get_cash_flow_metrics_for_month', {
-        target_month: month,
-        target_year: year
+      let data, error;
+      
+      if (dateRange) {
+        const month = dateRange.from.getMonth() + 1;
+        const year = dateRange.from.getFullYear();
+        ({ data, error } = await supabase.rpc('get_cash_flow_metrics_for_month', {
+          target_month: month,
+          target_year: year
+        }));
+      } else {
+        ({ data, error } = await supabase.rpc('get_cash_flow_metrics'));
+      }
+      
+      if (error) throw error
+      return data?.[0] || null
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to get cash flow metrics')
+    }
+  }
+
+  const getRetentionMetrics = async (dateRange?: { from: Date; to: Date }) => {
+    try {
+      // For retention metrics, we'll use a 30-day lookback from the end of the range
+      const daysBack = dateRange ? 30 : 30;
+      const { data, error } = await supabase.rpc('get_retention_metrics', {
+        days_back: daysBack
       })
       if (error) throw error
       return data?.[0] || null
     } catch (err) {
-      throw err instanceof Error ? err : new Error('Failed to get cash flow metrics for month')
+      throw err instanceof Error ? err : new Error('Failed to get retention metrics')
     }
   }
 
@@ -133,16 +160,6 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
     }
   }
 
-  const getCashFlowMetrics = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_cash_flow_metrics')
-      if (error) throw error
-      return data?.[0] || null
-    } catch (err) {
-      throw err instanceof Error ? err : new Error('Failed to get cash flow metrics')
-    }
-  }
-
   const resetNewClientStatus = async () => {
     if (!isAdmin) throw new Error('Unauthorized')
     
@@ -154,6 +171,7 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
       throw err instanceof Error ? err : new Error('Failed to reset new client status')
     }
   }
+
   const getEquityBasedTarget = async () => {
     try {
       const { data, error } = await supabase.rpc('calculate_equity_based_target')
@@ -161,18 +179,6 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
       return data?.[0] || null
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to calculate targets')
-    }
-  }
-
-  const getRetentionMetrics = async (daysBack: number = 30) => {
-    try {
-      const { data, error } = await supabase.rpc('get_retention_metrics', {
-        days_back: daysBack
-      })
-      if (error) throw error
-      return data?.[0] || null
-    } catch (err) {
-      throw err instanceof Error ? err : new Error('Failed to get retention metrics')
     }
   }
 
@@ -200,11 +206,10 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
     loading,
     error,
     addTransaction,
-    getCashFlowMetricsForMonth,
     getCashFlowMetrics,
+    getRetentionMetrics,
     resetNewClientStatus,
     getEquityBasedTarget,
-    getRetentionMetrics,
     getTodayTransactions,
     getTransactionsByType,
     refetch: () => {

@@ -48,9 +48,9 @@ export default function Analytics() {
     getCashFlowMetrics,
     getRetentionMetrics,
   } = useDailyTransactions();
-  const { getCurrentMonthStats, getStatsForMonth } = useMonthlyReset() as any;
+  const { getCurrentMonthStats, getMonthlyStats } = useMonthlyReset() as any;
 
-  const [equityTargetRaw, setEquityTargetRaw] = useState<any>(null);
+  const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const [retentionMetrics, setRetentionMetrics] = useState<any>(null);
   const [cashFlowMetrics, setCashFlowMetrics] = useState<any>(null);
 
@@ -64,20 +64,22 @@ export default function Analytics() {
 
     const fetchMetrics = async () => {
       try {
-        // Prefer month-specific APIs if available; fall back to current-month API
-        const statsPromise =
-          typeof getStatsForMonth === "function"
-            ? getStatsForMonth(monthStart)
-            : getCurrentMonthStats();
+        const selectedMonth = monthStart.getMonth() + 1;
+        const selectedYear = monthStart.getFullYear();
+        const isCurrentMonth = isSameMonth(monthStart, new Date());
+        
+        // Get monthly stats - use current month API for current month, monthly stats for others
+        const statsPromise = isCurrentMonth 
+          ? getCurrentMonthStats()
+          : getMonthlyStats(selectedMonth, selectedYear);
 
         const [monthlyStats, retentionData, cashFlowData] = await Promise.all([
           statsPromise,
-          // pass range so retention and cash flow are calculated for the selected month
           getRetentionMetrics({ from: monthStart, to: monthEnd }),
           getCashFlowMetrics({ from: monthStart, to: monthEnd }),
         ]);
 
-        setEquityTargetRaw(monthlyStats);
+        setMonthlyStats(monthlyStatsData);
         setRetentionMetrics(retentionData);
         setCashFlowMetrics(cashFlowData);
       } catch (error) {
@@ -86,13 +88,13 @@ export default function Analytics() {
     };
 
     fetchMetrics();
-  }, [monthStart, monthEnd, getCashFlowMetrics, getRetentionMetrics, getCurrentMonthStats, getStatsForMonth]);
+  }, [monthStart, monthEnd, getCashFlowMetrics, getRetentionMetrics, getCurrentMonthStats, getMonthlyStats]);
 
-  // Normalize API target shape (supports row or [row])
+  // Normalize API stats shape (supports row or [row])
   const equityTarget = useMemo(() => {
-    if (!equityTargetRaw) return null;
-    return Array.isArray(equityTargetRaw) ? equityTargetRaw[0] : equityTargetRaw;
-  }, [equityTargetRaw]);
+    if (!monthlyStats) return null;
+    return Array.isArray(monthlyStats) ? monthlyStats[0] : monthlyStats;
+  }, [monthlyStats]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PK", {
@@ -105,7 +107,7 @@ export default function Analytics() {
   const formatDecimal = (value: number, decimals: number = 2) =>
     Number(value ?? 0).toFixed(decimals);
 
-  // ── Local range-filtering for client data (ensures previous months show) ────
+  // ── Filter transactions for selected month ────
   const txInRange = useMemo(() => {
     return transactions.filter((t: any) => {
       const d = new Date(t.transaction_date ?? t.created_at ?? t.date);
@@ -176,15 +178,13 @@ export default function Analytics() {
     };
   }, [txInRange, dailyNOTsInRange, cashFlowMetrics, workingDaysCount, remainingWorkingDays]);
 
-  // ── Targets (prefer API, fallback to formula) ───────────────────────────────
+  // ── Targets from monthly stats API ───────────────────────────────────────
   const monthlyTargetNOTs = useMemo(() => {
-    const baseEquity = equityTarget?.base_equity || equityTarget?.current_equity || 0;
-    return (baseEquity * 0.18) / NOT_DENOMINATOR;
+    return equityTarget?.monthly_target_nots || 0;
   }, [equityTarget]);
 
   const dailyTargetNOTs = useMemo(() => {
-    // distribute across actual working days of the selected month (not a fixed 22)
-    return workingDaysCount > 0 ? monthlyTargetNOTs / workingDaysCount : 0;
+    return equityTarget?.daily_target_nots || 0;
   }, [monthlyTargetNOTs, workingDaysCount]);
 
   const remainingTargetNOTs = Math.max(0, monthlyTargetNOTs - analytics.totalNOTs);

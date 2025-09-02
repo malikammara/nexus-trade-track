@@ -33,24 +33,6 @@ export default function Dashboard() {
     setSelectedYear(year)
   }
 
-  // Calculate remaining days in month (only for current month)
-  const today = new Date()
-  const isCurrentMonth = selectedMonth === (today.getMonth() + 1) && selectedYear === today.getFullYear()
-  
-  // Calculate remaining working days (exclude weekends)
-  const remainingWorkingDays = isCurrentMonth ? (() => {
-    let workingDays = 0
-    const current = new Date(today)
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    while (current <= lastDayOfMonth) {
-      const dayOfWeek = current.getDay()
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
-        workingDays++
-      }
-      current.setDate(current.getDate() + 1)
-    }
-    return workingDays
-  })() : 0
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PK", {
@@ -109,8 +91,10 @@ export default function Dashboard() {
 
   const remainingNots = Math.max(0, monthlyTargetNots - currentNots);
   
-  // Calculate required daily average for remaining days
-  const requiredDailyAvg = remainingWorkingDays > 0 ? remainingNots / remainingWorkingDays : 0;
+  // Get context from stats
+  const isCurrentMonth = enhanced.is_current_month
+  const remainingWorkingDays = enhanced.remaining_working_days || 0
+  const requiredDailyAvg = enhanced.required_daily_avg || 0
 
   // Small helper to give clickable cards a consistent interaction affordance
   const clickableCard = "transition-shadow hover:shadow-md focus-visible:shadow-md";
@@ -123,7 +107,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">CS Falcons Dashboard</h1>
           <p className="text-muted-foreground">
-            Monitor CS Falcons team trading performance and client management metrics
+            Monitor CS Falcons team trading performance for {enhanced.selected_month}/{enhanced.selected_year}
           </p>
         </div>
         
@@ -133,6 +117,9 @@ export default function Dashboard() {
             year={selectedYear}
             onMonthYearChange={handleMonthYearChange}
           />
+          {isCurrentMonth && (
+            <MonthlyResetForm onSuccess={() => window.location.reload()} />
+          )}
         </div>
       </div>
 

@@ -16,6 +16,11 @@ export interface EnhancedDashboardStats extends DashboardStats {
   monthly_target_nots: number
   daily_target_nots: number
   weekly_target_nots: number
+  
+  // Month context
+  selected_month: number
+  selected_year: number
+  is_current_month: boolean
 }
 
 const NOT_DENOMINATOR = 6000
@@ -33,24 +38,43 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
       // Use provided month/year or current month/year
       const targetMonth = month || new Date().getMonth() + 1
       const targetYear = year || new Date().getFullYear()
+      const isCurrentMonth = targetMonth === new Date().getMonth() + 1 && targetYear === new Date().getFullYear()
       
-      // 1) Get cash flow metrics for the target month
+      // 1) Get monthly dashboard stats (includes base equity and targets)
+      const { data: monthlyData, error: monthlyError } = await supabase.rpc('get_monthly_dashboard_stats', {
+        p_month: targetMonth,
+        p_year: targetYear
+      })
+      if (monthlyError) throw monthlyError
+      const monthlyStats = monthlyData?.[0] || {}
+
+      // 2) Get cash flow metrics for the target month
       const { data: cashFlowData, error: cashFlowError } = await supabase.rpc('get_cash_flow_metrics_for_month', {
         target_month: targetMonth,
         target_year: targetYear
       })
       if (cashFlowError) throw cashFlowError
       const cashFlow = cashFlowData?.[0] || {}
-
-      // 2) Get monthly performance data
-      const { data: monthlyData, error: monthlyError } = await supabase.rpc('get_monthly_team_stats', {
-        target_month: targetMonth,
-        target_year: targetYear
-      })
-      if (monthlyError) throw monthlyError
-      const monthlyStats = monthlyData?.[0] || {}
       
-      // 3) Calculate working days for target month
+      // 3) Get transactions for the target month to calculate actual NOTs
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('daily_transactions')
+        .select('transaction_type, amount, nots_generated, transaction_date')
+        .gte('transaction_date', `${targetYear}-${targetMonth.toString().padStart(2, '0')}-01`)
+        .lt('transaction_date', `${targetYear}-${(targetMonth + 1).toString().padStart(2, '0')}-01`)
+      
+      if (transactionsError) throw transactionsError
+      
+      const monthTransactions = transactionsData || []
+      const monthlyRevenue = monthTransactions
+        .filter(t => t.transaction_type === 'commission')
+        .reduce((sum, t) => sum + (t.amount || 0), 0)
+      
+      const monthlyNOTs = monthTransactions
+        .filter(t => t.transaction_type === 'commission')
+        .reduce((sum, t) => sum + (t.nots_generated || 0), 0)
+
+      // 4) Calculate working days for target month
       const { data: workingDaysData, error: workingDaysError } = await supabase.rpc('get_working_days_in_month', {
         target_year: targetYear,
         target_month: targetMonth
@@ -58,29 +82,15 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
       
       const workingDays = workingDaysData || 22
 
-      // 4) Calculate current and base equity
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('clients')
-        .select('overall_margin, margin_in, is_new_client')
-      
-      if (clientsError) throw clientsError
-      
-      const currentEquity = (clientsData || []).reduce((sum, c) => sum + (c.overall_margin || 0), 0)
-      
-      // Base equity = current equity - new deposits - margin additions + withdrawals
-      const newDeposits = cashFlow.total_new_deposits || 0
-      const marginAdditions = cashFlow.total_margin_additions || 0
-      const totalWithdrawals = cashFlow.total_withdrawals || 0
-      const baseEquity = currentEquity - newDeposits - marginAdditions + totalWithdrawals
-      
-      // 5) Calculate targets based on base equity
-      const monthlyTargetNOTs = (baseEquity * 0.18) / NOT_DENOMINATOR
+      // 5) Use stats from the monthly dashboard function
+      const currentEquity = monthlyStats.current_equity || 0
+      const baseEquity = monthlyStats.base_equity || currentEquity
+      const monthlyTargetNOTs = monthlyStats.monthly_target_nots || 0
       const dailyTargetNOTs = monthlyTargetNOTs / workingDays
       const weeklyTargetNOTs = dailyTargetNOTs * 5
 
-      // 6) Get today's activity for current month only
+      // 6) Get today's activity (only for current month)
       const today = new Date()
-      const isCurrentMonth = targetMonth === (today.getMonth() + 1) && targetYear === today.getFullYear()
       
       const { data: todayData, error: todayError } = await supabase
         .from('daily_transactions')
@@ -98,11 +108,11 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
         .filter(t => t.transaction_type === 'withdrawal')
         .reduce((sum, t) => sum + (t.amount || 0), 0)
 
-      // 7) Retention metrics (only for current month)
+      // 7) Retention metrics
       const { data: retentionData, error: retentionError } = await supabase
         .rpc('get_retention_metrics', { days_back: 30 })
 
-      if (!retentionError && retentionData?.[0] && isCurrentMonth) {
+      if (!retentionError && retentionData?.[0]) {
         setRetentionMetrics(retentionData[0])
       }
 
@@ -119,7 +129,7 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
         return wd
       })() : 0
 
-      const currentNots = monthlyStats.total_nots || 0
+      const currentNots = monthlyNOTs
       const remainingNots = Math.max(0, monthlyTargetNOTs - currentNots)
       const requiredDailyAvg = remainingWorkingDays > 0 ? remainingNots / remainingWorkingDays : 0
 
@@ -127,9 +137,9 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
       setStats({
         // Base stats
         total_clients: monthlyStats.total_clients || 0,
-        total_margin_in: newDeposits + marginAdditions,
+        total_margin_in: (cashFlow.total_new_deposits || 0) + (cashFlow.total_margin_additions || 0),
         total_overall_margin: currentEquity,
-        total_monthly_revenue: monthlyStats.total_revenue || 0,
+        total_monthly_revenue: monthlyRevenue,
         total_nots: currentNots,
 
         // Keep these for legacy components that might read them
@@ -143,42 +153,25 @@ export function useDashboard(filterMonth?: number, filterYear?: number) {
         // Enhanced fields
         total_equity: currentEquity,
         base_equity: baseEquity,
-        total_margin_in: newDeposits + marginAdditions,
-        total_withdrawals: totalWithdrawals,
+        total_margin_in: (cashFlow.total_new_deposits || 0) + (cashFlow.total_margin_additions || 0),
+        total_withdrawals: cashFlow.total_withdrawals || 0,
         monthly_target_nots: monthlyTargetNOTs, // NOTs
         today_nots: todayNots,
         today_margin_added: todayMarginAdded,
         today_withdrawals: todayWithdrawals,
         
-        // Add remaining days info
+        // Add month context and remaining days info
+        selected_month: targetMonth,
+        selected_year: targetYear,
+        is_current_month: isCurrentMonth,
         remaining_working_days: remainingWorkingDays,
         required_daily_avg: requiredDailyAvg,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
 
-      // Fallback demo data
-      setStats({
-        total_clients: 12,
-        total_margin_in: 450000,
-        total_overall_margin: 3000000,
-        total_monthly_revenue: 0,        // September starts fresh
-        total_nots: 0,                   // September starts fresh
-        target_nots: 90,                 // (3M * 18%) / 6000 = 90 NOTs
-        progress_percentage: 32.2,
-        daily_target_nots: 4.09,        // 90 / 22 working days
-        weekly_target_nots: 20.45,      // 4.09 * 5 days
-        total_equity: 3000000,
-        base_equity: 3000000,           // Base for September
-        total_margin_in: 450000,
-        total_withdrawals: 150000,
-        monthly_target_nots: 90,        // Correct NOTs calculation
-        today_nots: 0,                  // Fresh start
-        today_margin_added: 0,
-        today_withdrawals: 0,
-        remaining_working_days: 0,
-        required_daily_avg: 0,
-      })
+      // Set error state
+      setStats(null)
     } finally {
       setLoading(false)
     }

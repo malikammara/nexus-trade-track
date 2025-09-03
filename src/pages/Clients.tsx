@@ -50,9 +50,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// NEW: month-year picker + hook
+// NEW: month-year picker
 import { MonthYearPicker } from "@/components/MonthYearPicker";
-import { useMonthlyClientCommissions } from "@/hooks/useMonthlyClientCommissions";
 
 type SortKey = "none" | "equity" | "revenue";
 type SortDir = "asc" | "desc";
@@ -61,9 +60,8 @@ export default function Clients() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { clients, loading, error, addClient, updateClient, deleteClient } = useClients();
-  const { addTransaction } = useDailyTransactions();
 
-  // Month/Year selection (1-based month to match Dashboard)
+  // Month/Year selection (1-based month)
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const handleMonthYearChange = (m: number, y: number) => {
@@ -71,13 +69,35 @@ export default function Clients() {
     setSelectedYear(y);
   };
 
-  // Fetch & aggregate commissions for selected month
+  // Pull month-scoped transactions from your existing hook
+  // The hook already filters by date range when you pass month/year.
   const {
-    byClientId: monthlyCommissions,
-    total: totalMonthlyCommission,
-    loading: commissionsLoading,
-    error: commissionsError,
-  } = useMonthlyClientCommissions(selectedMonth, selectedYear);
+    transactions,
+    loading: txLoading,
+    error: txError,
+    addTransaction,
+  } = useDailyTransactions(selectedMonth, selectedYear);
+
+  // Derive "commission only" transactions for the selected month
+  const commissionTx = useMemo(
+    () => transactions.filter((t) => t.transaction_type === "commission"),
+    [transactions]
+  );
+
+  // Aggregate commission per client for the selected month
+  const monthlyCommissions = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of commissionTx) {
+      const amt = Number(t.amount ?? 0);
+      map.set(t.client_id, (map.get(t.client_id) ?? 0) + amt);
+    }
+    return map;
+  }, [commissionTx]);
+
+  const totalMonthlyCommission = useMemo(
+    () => commissionTx.reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+    [commissionTx]
+  );
 
   // Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -170,9 +190,7 @@ export default function Clients() {
       await addTransaction(clientId, transactionType, amount, description);
       toast({
         title: "Transaction Added",
-        description: `${transactionType.replace("_", " ")} of ${formatCurrency(
-          amount
-        )} recorded successfully.`,
+        description: `${transactionType.replace("_", " ")} of ${formatCurrency(amount)} recorded successfully.`,
       });
     } catch {
       toast({
@@ -221,14 +239,12 @@ export default function Clients() {
     // Sorting
     if (sortKey !== "none") {
       list.sort((a, b) => {
-        const aVal =
-          sortKey === "equity"
-            ? (a.overall_margin ?? 0)
-            : (monthlyCommissions.get(a.id) ?? 0); // month commission
-        const bVal =
-          sortKey === "equity"
-            ? (b.overall_margin ?? 0)
-            : (monthlyCommissions.get(b.id) ?? 0);
+        const aVal = sortKey === "equity"
+          ? (a.overall_margin ?? 0)
+          : (monthlyCommissions.get(a.id) ?? 0); // month commission
+        const bVal = sortKey === "equity"
+          ? (b.overall_margin ?? 0)
+          : (monthlyCommissions.get(b.id) ?? 0);
         const diff = aVal - bVal;
         return sortDir === "asc" ? diff : -diff;
       });
@@ -247,12 +263,12 @@ export default function Clients() {
     monthlyCommissions, // important
   ]);
 
-  // Keep your existing totals (equity/NOTs), but use month commissions for revenue display card
+  // Keep your existing totals; use month commissions for “Total Revenue” display
   const totalStats = clients.reduce(
     (acc, client) => ({
       total_margin_in: acc.total_margin_in + (client.margin_in ?? 0),
       total_overall_margin: acc.total_overall_margin + (client.overall_margin ?? 0),
-      total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0), // not shown anymore
+      total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0), // not displayed below
       total_nots: acc.total_nots + (client.nots_generated ?? 0),
     }),
     { total_margin_in: 0, total_overall_margin: 0, total_revenue: 0, total_nots: 0 }
@@ -289,7 +305,7 @@ export default function Clients() {
             onMonthYearChange={handleMonthYearChange}
           />
           {/* Non-admins shouldn't see "Add Client" */}
-          {isAdmin && <ClientForm onSubmit={handleAddClient} />}
+          <ClientForm onSubmit={handleAddClient} />
         </div>
       </div>
 
@@ -317,7 +333,7 @@ export default function Clients() {
           </CardContent>
         </Card>
 
-        {/* UPDATED: show month commission total */}
+        {/* UPDATED: month-only commissions total */}
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue (Commission)</CardTitle>
@@ -418,13 +434,7 @@ export default function Clients() {
                 </div>
               </div>
               <DialogFooter className="flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    clearFilters();
-                  }}
-                >
+                <Button type="button" variant="ghost" onClick={() => clearFilters()}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Reset Filters
                 </Button>
@@ -479,13 +489,7 @@ export default function Clients() {
                 </div>
               </div>
               <DialogFooter className="flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    clearSorting();
-                  }}
-                >
+                <Button type="button" variant="ghost" onClick={() => clearSorting()}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Reset Sorting
                 </Button>
@@ -510,15 +514,15 @@ export default function Clients() {
       )}
 
       {/* Month commission fetch state */}
-      {commissionsLoading && (
+      {txLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading commissions for {String(selectedMonth).padStart(2, "0")}/{selectedYear}…
         </div>
       )}
-      {commissionsError && (
+      {txError && (
         <div className="text-destructive text-sm">
-          Failed to load commissions for {String(selectedMonth).padStart(2, "0")}/{selectedYear}. {commissionsError}
+          Failed to load transactions for {String(selectedMonth).padStart(2, "0")}/{selectedYear}.
         </div>
       )}
 
@@ -573,9 +577,7 @@ export default function Clients() {
                   {client.agent && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Agent:</span>
-                      <span className="font-medium text-primary">
-                        {client.agent.name}
-                      </span>
+                      <span className="font-medium text-primary">{client.agent.name}</span>
                     </div>
                   )}
                   {client.is_new_client && (
@@ -604,9 +606,7 @@ export default function Clients() {
                     <span className="text-muted-foreground">
                       Commission ({String(selectedMonth).padStart(2, "0")}/{selectedYear}):
                     </span>
-                    <span className="font-medium">
-                      {formatCurrency(commissionForMonth)}
-                    </span>
+                    <span className="font-medium">{formatCurrency(commissionForMonth)}</span>
                   </div>
                 </div>
 

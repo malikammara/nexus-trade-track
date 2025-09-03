@@ -315,7 +315,7 @@ export default function Dashboard() {
                     <span className="font-medium">{formatCurrency(currentEquity)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total margin in:</span>
+                    <span className="text-muted-foreground">Total New Margin:</span>
                     <span className="font-medium text-trading-profit">{formatCurrency(totalMarginIn)}</span>
                   </div>
                   <div className="flex justify-between text-sm">

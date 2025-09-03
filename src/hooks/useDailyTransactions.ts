@@ -51,9 +51,7 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
         const nextMonth = month === 12 ? 1 : month + 1
         const nextYear = month === 12 ? year + 1 : year
         const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`
-        query = query
-          .gte('transaction_date', startDate)
-          .lt('transaction_date', endDate) // ✅ exclusive end date
+        query = query.gte('transaction_date', startDate).lte('transaction_date', endDate)
       }
 
       const { data, error } = await query
@@ -80,9 +78,7 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
         const nextMonth = month === 12 ? 1 : month + 1
         const nextYear = month === 12 ? year + 1 : year
         const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`
-        query = query
-          .gte('tracking_date', startDate)
-          .lt('tracking_date', endDate) // ✅ exclusive end date
+        query = query.gte('tracking_date', startDate).lte('tracking_date', endDate)
       } else {
         // Default to last 30 days if no filter
         const startDate = new Date()
@@ -120,11 +116,12 @@ export function useDailyTransactions(filterMonth?: number, filterYear?: number) 
     }
   }
 
-  const getRetentionMetrics = async (_dateRange?: { from: Date; to: Date }) => {
+  const getRetentionMetrics = async (dateRange?: { from: Date; to: Date }) => {
     try {
-      // For retention metrics, we'll use a 30-day lookback (server handles it)
+      // For retention metrics, we'll use a 30-day lookback from the end of the range
+      const daysBack = dateRange ? 30 : 30;
       const { data, error } = await supabase.rpc('get_retention_metrics', {
-        days_back: 30
+        days_back: daysBack
       })
       if (error) throw error
       return data?.[0] || null

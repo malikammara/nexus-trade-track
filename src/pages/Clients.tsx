@@ -199,22 +199,29 @@ export default function Clients() {
     // Sorting
     if (sortKey !== "none") {
       list.sort((a, b) => {
-        const aVal = sortKey === "equity" ? a.overall_margin : a.monthly_revenue;
-        const bVal = sortKey === "equity" ? b.overall_margin : b.monthly_revenue;
+        let aVal: number, bVal: number;
+        
+        if (sortKey === "equity") {
+          aVal = a.overall_margin;
+          bVal = b.overall_margin;
+        } else if (sortKey === "revenue") {
+          aVal = a.monthly_revenue;
+          bVal = b.monthly_revenue;
+        } else if (sortKey === "created") {
+          aVal = new Date(a.created_at).getTime();
+          bVal = new Date(b.created_at).getTime();
+        } else {
+          aVal = 0;
+          bVal = 0;
+        }
+        
         const diff = (aVal ?? 0) - (bVal ?? 0);
         return sortDir === "asc" ? diff : -diff;
       });
-    }
-
-    return list;
-  }, [clients, searchTerm, minEquity, maxEquity, minRevenue, maxRevenue, sortKey, sortDir]);
-
-  const totalStats = clients.reduce(
-    (acc, client) => ({
       total_margin_in: acc.total_margin_in + (client.margin_in ?? 0),
       total_overall_margin: acc.total_overall_margin + (client.overall_margin ?? 0),
       total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0),
-      total_nots: acc.total_nots + (client.nots_generated ?? 0),
+  }, [clients, searchTerm, minEquity, maxEquity, minRevenue, maxRevenue, sortKey, sortDir]);
     }),
     { total_margin_in: 0, total_overall_margin: 0, total_revenue: 0, total_nots: 0 }
   );

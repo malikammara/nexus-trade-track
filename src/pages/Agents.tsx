@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { MonthYearPicker } from "@/components/MonthYearPicker";
 import {
   Users,
   TrendingUp,
@@ -15,11 +16,13 @@ import {
   Mail,
   UserCheck,
   UserX,
+  Calendar,
 } from "lucide-react";
 import { Agent, Client } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useAgents } from "@/hooks/useAgents";
 import { useClients } from "@/hooks/useClients";
+import { useDailyTransactions } from "@/hooks/useDailyTransactions";
 import { AgentForm } from "@/components/AgentForm";
 import { ClientAgentLinkForm } from "@/components/ClientAgentLinkForm";
 import { useAuth } from "@/contexts/AuthProvider";
@@ -47,6 +50,12 @@ export default function Agents() {
   const { isAdmin } = useAuth();
   const { agents, loading, error, addAgent, updateAgent, deleteAgent, getAgentClients } = useAgents();
   const { clients } = useClients();
+  
+  // Month filter state
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  
+  const { getTransactionsByType } = useDailyTransactions(selectedMonth, selectedYear);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -64,6 +73,33 @@ export default function Agents() {
 
   const formatPercentage = (rate: number) => {
     return `${(rate * 100).toFixed(1)}%`;
+  };
+
+  const handleMonthYearChange = (month: number, year: number) => {
+    setSelectedMonth(month);
+    setSelectedYear(year);
+  };
+
+  // Calculate agent commission for selected month
+  const getAgentMonthlyCommission = (agentId: string) => {
+    const agentClients = clients.filter(c => c.agent_id === agentId);
+    const commissionTxns = getTransactionsByType('commission');
+    
+    const totalCommission = commissionTxns
+      .filter(t => agentClients.some(c => c.id === t.client_id))
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    const agent = agents.find(a => a.id === agentId);
+    return totalCommission * (agent?.commission_rate || 0);
+  };
+
+  const getAgentMonthlyNOTs = (agentId: string) => {
+    const agentClients = clients.filter(c => c.agent_id === agentId);
+    const commissionTxns = getTransactionsByType('commission');
+    
+    return commissionTxns
+      .filter(t => agentClients.some(c => c.id === t.client_id))
+      .reduce((sum, t) => sum + (t.nots_generated || 0), 0);
   };
 
   const handleAddAgent = async (
@@ -163,11 +199,16 @@ export default function Agents() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">CS Falcons Agent Management</h1>
           <p className="text-muted-foreground">
-            Manage agents and track their client performance
+            Manage agents and track their client performance for {selectedMonth}/{selectedYear}
           </p>
         </div>
 
         <div className="flex gap-2">
+          <MonthYearPicker
+            month={selectedMonth}
+            year={selectedYear}
+            onMonthYearChange={handleMonthYearChange}
+          />
           {isAdmin && <AgentForm onSubmit={handleAddAgent} />}
           <ClientAgentLinkForm />
         </div>
@@ -205,27 +246,30 @@ export default function Agents() {
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Monthly Commission</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(totalStats.total_revenue)}
+              {formatCurrency(getTransactionsByType('commission').reduce((sum, t) => sum + (t.amount || 0), 0))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {selectedMonth}/{selectedYear}
+            </p>
           </CardContent>
         </Card>
 
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Company Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-trading-profit" />
+            <CardTitle className="text-sm font-medium">Monthly NOTs</CardTitle>
+            <Target className="h-4 w-4 text-trading-profit" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-trading-profit">
-              {formatCurrency(totalStats.total_revenue)}
+              {getTransactionsByType('commission').reduce((sum, t) => sum + (t.nots_generated || 0), 0).toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
-              From all agents
+              {selectedMonth}/{selectedYear}
             </p>
           </CardContent>
         </Card>
@@ -267,15 +311,15 @@ export default function Agents() {
 
       {/* Agents List */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {visibleAgents.map((agent) => (
+                    <span className="text-muted-foreground">Commission ({selectedMonth}/{selectedYear}):</span>
           <Card key={agent.id} className="shadow-card hover:shadow-elegant transition-shadow">
-            <CardHeader className="pb-3">
+                      {formatCurrency(getAgentMonthlyCommission(agent.id))}
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <CardTitle className="text-lg">{agent.name}</CardTitle>
-                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">NOTs ({selectedMonth}/{selectedYear}):</span>
                     <Badge variant={agent.is_active ? "default" : "secondary"}>
-                      {agent.is_active ? "Active" : "Inactive"}
+                      {getAgentMonthlyNOTs(agent.id).toFixed(2)}
                     </Badge>
                   </div>
                 </div>

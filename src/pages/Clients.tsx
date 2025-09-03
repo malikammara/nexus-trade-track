@@ -1,3 +1,4 @@
+// src/pages/Clients.tsx
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// NEW: month-year picker + hook
+import { MonthYearPicker } from "@/components/MonthYearPicker";
+import { useMonthlyClientCommissions } from "@/hooks/useMonthlyClientCommissions";
+
 type SortKey = "none" | "equity" | "revenue";
 type SortDir = "asc" | "desc";
 
@@ -58,13 +63,29 @@ export default function Clients() {
   const { clients, loading, error, addClient, updateClient, deleteClient } = useClients();
   const { addTransaction } = useDailyTransactions();
 
+  // Month/Year selection (1-based month to match Dashboard)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const handleMonthYearChange = (m: number, y: number) => {
+    setSelectedMonth(m);
+    setSelectedYear(y);
+  };
+
+  // Fetch & aggregate commissions for selected month
+  const {
+    byClientId: monthlyCommissions,
+    total: totalMonthlyCommission,
+    loading: commissionsLoading,
+    error: commissionsError,
+  } = useMonthlyClientCommissions(selectedMonth, selectedYear);
+
   // Search
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Filters
+  // Filters (equity + month commission)
   const [minEquity, setMinEquity] = useState<string>("");
   const [maxEquity, setMaxEquity] = useState<string>("");
-  const [minRevenue, setMinRevenue] = useState<string>("");
+  const [minRevenue, setMinRevenue] = useState<string>(""); // interpreted as min monthly *commission*
   const [maxRevenue, setMaxRevenue] = useState<string>("");
 
   // Sorting
@@ -81,7 +102,7 @@ export default function Clients() {
       currency: "PKR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount ?? 0);
   };
 
   const handleAddClient = async (
@@ -170,7 +191,7 @@ export default function Clients() {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // Derived list: search + filter + sort
+  // Derived list: search + filter + sort (using month commission for "revenue")
   const visibleClients = useMemo(() => {
     const minEq = num(minEquity);
     const maxEq = num(maxEquity);
@@ -188,32 +209,50 @@ export default function Clients() {
     // Filters
     list = list.filter((c) => {
       const equity = c.overall_margin ?? 0;
-      const revenue = c.monthly_revenue ?? 0;
+      const revenueForMonth = monthlyCommissions.get(c.id) ?? 0;
+
       if (minEq !== undefined && equity < minEq) return false;
       if (maxEq !== undefined && equity > maxEq) return false;
-      if (minRev !== undefined && revenue < minRev) return false;
-      if (maxRev !== undefined && revenue > maxRev) return false;
+      if (minRev !== undefined && revenueForMonth < minRev) return false;
+      if (maxRev !== undefined && revenueForMonth > maxRev) return false;
       return true;
     });
 
     // Sorting
     if (sortKey !== "none") {
       list.sort((a, b) => {
-        const aVal = sortKey === "equity" ? a.overall_margin : a.monthly_revenue;
-        const bVal = sortKey === "equity" ? b.overall_margin : b.monthly_revenue;
-        const diff = (aVal ?? 0) - (bVal ?? 0);
+        const aVal =
+          sortKey === "equity"
+            ? (a.overall_margin ?? 0)
+            : (monthlyCommissions.get(a.id) ?? 0); // month commission
+        const bVal =
+          sortKey === "equity"
+            ? (b.overall_margin ?? 0)
+            : (monthlyCommissions.get(b.id) ?? 0);
+        const diff = aVal - bVal;
         return sortDir === "asc" ? diff : -diff;
       });
     }
 
     return list;
-  }, [clients, searchTerm, minEquity, maxEquity, minRevenue, maxRevenue, sortKey, sortDir]);
+  }, [
+    clients,
+    searchTerm,
+    minEquity,
+    maxEquity,
+    minRevenue,
+    maxRevenue,
+    sortKey,
+    sortDir,
+    monthlyCommissions, // important
+  ]);
 
+  // Keep your existing totals (equity/NOTs), but use month commissions for revenue display card
   const totalStats = clients.reduce(
     (acc, client) => ({
       total_margin_in: acc.total_margin_in + (client.margin_in ?? 0),
       total_overall_margin: acc.total_overall_margin + (client.overall_margin ?? 0),
-      total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0),
+      total_revenue: acc.total_revenue + (client.monthly_revenue ?? 0), // not shown anymore
       total_nots: acc.total_nots + (client.nots_generated ?? 0),
     }),
     { total_margin_in: 0, total_overall_margin: 0, total_revenue: 0, total_nots: 0 }
@@ -242,8 +281,16 @@ export default function Clients() {
           </p>
         </div>
 
-        {/* Non-admins shouldn't see "Add Client" */}
-        {isAdmin && <ClientForm onSubmit={handleAddClient} />}
+        <div className="flex items-center gap-2">
+          {/* Month/Year controls for this page */}
+          <MonthYearPicker
+            month={selectedMonth}
+            year={selectedYear}
+            onMonthYearChange={handleMonthYearChange}
+          />
+          {/* Non-admins shouldn't see "Add Client" */}
+          {isAdmin && <ClientForm onSubmit={handleAddClient} />}
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -270,15 +317,19 @@ export default function Clients() {
           </CardContent>
         </Card>
 
+        {/* UPDATED: show month commission total */}
         <Card className="shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Revenue (Commission)</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(totalStats.total_revenue)}
+              {formatCurrency(totalMonthlyCommission)}
             </div>
+            <p className="text-xs text-muted-foreground">
+              For {String(selectedMonth).padStart(2, "0")}/{selectedYear}
+            </p>
           </CardContent>
         </Card>
 
@@ -342,7 +393,9 @@ export default function Clients() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm text-muted-foreground">Min Revenue</label>
+                  <label className="text-sm text-muted-foreground">
+                    Min Commission ({String(selectedMonth).padStart(2, "0")}/{selectedYear})
+                  </label>
                   <Input
                     type="number"
                     inputMode="numeric"
@@ -352,7 +405,9 @@ export default function Clients() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm text-muted-foreground">Max Revenue</label>
+                  <label className="text-sm text-muted-foreground">
+                    Max Commission ({String(selectedMonth).padStart(2, "0")}/{selectedYear})
+                  </label>
                   <Input
                     type="number"
                     inputMode="numeric"
@@ -402,7 +457,7 @@ export default function Clients() {
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
                       <SelectItem value="equity">Equity</SelectItem>
-                      <SelectItem value="revenue">Revenue</SelectItem>
+                      <SelectItem value="revenue">Commission (Month)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -454,125 +509,145 @@ export default function Clients() {
         <div className="text-destructive text-sm">Failed to load clients. Please refresh.</div>
       )}
 
+      {/* Month commission fetch state */}
+      {commissionsLoading && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading commissions for {String(selectedMonth).padStart(2, "0")}/{selectedYear}…
+        </div>
+      )}
+      {commissionsError && (
+        <div className="text-destructive text-sm">
+          Failed to load commissions for {String(selectedMonth).padStart(2, "0")}/{selectedYear}. {commissionsError}
+        </div>
+      )}
+
       {/* Clients List */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {visibleClients.map((client) => (
-          <Card key={client.id} className="shadow-card hover:shadow-elegant transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <CardTitle className="text-lg">{client.name}</CardTitle>
-                <div className="flex gap-1">
-                  {/* Keep editing visible to all; gate it too if desired:
-                     {isAdmin && <ClientForm ... isEditing />} */}
-                  <ClientForm
-                    onSubmit={(data) => handleUpdateClient(client.id, data)}
-                    client={client}
-                    isEditing
-                  />
-                  {isAdmin && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Client</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete {client.name}? This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteClient(client)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              </div>
-              <Badge variant="secondary" className="w-fit">
-                {(client.nots_generated ?? 0).toFixed(2)} NOTs
-              </Badge>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2 text-sm">
-                {client.agent && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Agent:</span>
-                    <span className="font-medium text-primary">
-                      {client.agent.name}
-                    </span>
-                  </div>
-                )}
-                {client.is_new_client && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status:</span>
-                    <Badge variant="default" className="text-xs">New Client</Badge>
-                  </div>
-                )}
-                {client.is_new_client && client.margin_in > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Initial Deposit:</span>
-                    <span className="font-medium text-trading-profit">
-                      {formatCurrency(client.margin_in)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Current Equity:</span>
-                  <span className="font-medium text-trading-profit">
-                    {formatCurrency(client.overall_margin ?? 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Monthly Revenue:</span>
-                  <span className="font-medium">
-                    {formatCurrency(client.monthly_revenue ?? 0)}
-                  </span>
-                </div>
-              </div>
+        {visibleClients.map((client) => {
+          const commissionForMonth = monthlyCommissions.get(client.id) ?? 0;
 
-              {/* Non-admins shouldn't see margin/withdrawal/commission actions */}
-              {isAdmin && (
-                <div className="pt-3 border-t border-border">
-                  <div className="flex gap-2">
-                    <TransactionForm
-                      clientId={client.id}
-                      clientName={client.name}
-                      onSubmit={handleAddTransaction}
-                      transactionType="margin_add"
-                      buttonText="Add Margin"
-                      buttonVariant="outline"
-                      buttonSize="sm"
+          return (
+            <Card key={client.id} className="shadow-card hover:shadow-elegant transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <CardTitle className="text-lg">{client.name}</CardTitle>
+                  <div className="flex gap-1">
+                    <ClientForm
+                      onSubmit={(data) => handleUpdateClient(client.id, data)}
+                      client={client}
+                      isEditing
                     />
-                    <TransactionForm
-                      clientId={client.id}
-                      clientName={client.name}
-                      onSubmit={handleAddTransaction}
-                      transactionType="withdrawal"
-                      buttonText="Withdrawal"
-                      buttonVariant="outline"
-                      buttonSize="sm"
-                    />
-                    <TransactionForm
-                      clientId={client.id}
-                      clientName={client.name}
-                      onSubmit={handleAddTransaction}
-                      transactionType="commission"
-                      buttonText="Commission"
-                      buttonVariant="outline"
-                      buttonSize="sm"
-                    />
+                    {isAdmin && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete {client.name}? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteClient(client)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                <Badge variant="secondary" className="w-fit">
+                  {(client.nots_generated ?? 0).toFixed(2)} NOTs
+                </Badge>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="space-y-2 text-sm">
+                  {client.agent && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Agent:</span>
+                      <span className="font-medium text-primary">
+                        {client.agent.name}
+                      </span>
+                    </div>
+                  )}
+                  {client.is_new_client && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge variant="default" className="text-xs">New Client</Badge>
+                    </div>
+                  )}
+                  {client.is_new_client && (client.margin_in ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Initial Deposit:</span>
+                      <span className="font-medium text-trading-profit">
+                        {formatCurrency(client.margin_in)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Equity:</span>
+                    <span className="font-medium text-trading-profit">
+                      {formatCurrency(client.overall_margin ?? 0)}
+                    </span>
+                  </div>
+
+                  {/* UPDATED: month-only commission */}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Commission ({String(selectedMonth).padStart(2, "0")}/{selectedYear}):
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(commissionForMonth)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Admin actions */}
+                {isAdmin && (
+                  <div className="pt-3 border-t border-border">
+                    <div className="flex gap-2">
+                      <TransactionForm
+                        clientId={client.id}
+                        clientName={client.name}
+                        onSubmit={handleAddTransaction}
+                        transactionType="margin_add"
+                        buttonText="Add Margin"
+                        buttonVariant="outline"
+                        buttonSize="sm"
+                      />
+                      <TransactionForm
+                        clientId={client.id}
+                        clientName={client.name}
+                        onSubmit={handleAddTransaction}
+                        transactionType="withdrawal"
+                        buttonText="Withdrawal"
+                        buttonVariant="outline"
+                        buttonSize="sm"
+                      />
+                      <TransactionForm
+                        clientId={client.id}
+                        clientName={client.name}
+                        onSubmit={handleAddTransaction}
+                        transactionType="commission"
+                        buttonText="Commission"
+                        buttonVariant="outline"
+                        buttonSize="sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {visibleClients.length === 0 && !loading && (

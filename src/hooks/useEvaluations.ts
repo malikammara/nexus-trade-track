@@ -3,15 +3,17 @@ import { supabase } from '@/lib/supabase'
 import type { AgentEvaluation, EvaluationAlert } from '@/types'
 import { useAuth } from '@/contexts/AuthProvider'
 
-/**
- * Admin model:
- * - Prefer the isAdmin flag from your AuthProvider (e.g., from user metadata).
- * - Fallback to an allowlist (emails) for local dev or when metadata is missing.
- */
 const ADMIN_EMAIL_ALLOWLIST = new Set([
   'syedyousufhussainzaidi@gmail.com',
   'doctorcrack007@gmail.com',
 ])
+
+// helpers
+const isNonEmpty = (v: unknown): v is string =>
+  typeof v === 'string' && v.trim().length > 0
+
+const firstNonEmpty = (...vals: Array<unknown>) =>
+  vals.find(isNonEmpty) ?? null
 
 export function useEvaluations() {
   const [evaluations, setEvaluations] = useState<AgentEvaluation[]>([])
@@ -53,28 +55,40 @@ export function useEvaluations() {
     }
   }
 
-  // Helper to normalize possible field names coming from forms
+  // Map various possible field names (snake, camel, nested) -> the 3 canonical remark fields.
   const normalizeRemarks = (src: any) => {
-    const tone_remarks =
-      src?.tone_remarks ??
-      src?.toneRemarks ??
-      src?.toneClarityRemarks ??
-      src?.tone_clarity_remarks ??
-      null
+    // try many common shapes/aliases and nested forms
+    const toneCandidates = [
+      src?.tone_remarks,
+      src?.toneRemarks,
+      src?.tone_clarity_remarks,
+      src?.toneClarityRemarks,
+      src?.remarks?.tone,
+      src?.remarks?.tone_clarity,
+      src?.remarks?.toneClarity,
+    ]
+    const satisfactionCandidates = [
+      src?.satisfaction_remarks,
+      src?.client_satisfaction_remarks,
+      src?.clientSatisfactionRemarks,
+      src?.remarks?.satisfaction,
+      src?.remarks?.client_satisfaction,
+      src?.remarks?.clientSatisfaction,
+    ]
+    const portfolioCandidates = [
+      src?.portfolio_remarks,
+      src?.portfolio_revenue_remarks,
+      src?.portfolioRevenueRemarks,
+      src?.remarks?.portfolio,
+      src?.remarks?.portfolio_revenue,
+      src?.remarks?.portfolioRevenue,
+    ]
 
-    const satisfaction_remarks =
-      src?.satisfaction_remarks ??
-      src?.clientSatisfactionRemarks ??
-      src?.client_satisfaction_remarks ??
-      null
-
-    const portfolio_remarks =
-      src?.portfolio_remarks ??
-      src?.portfolioRevenueRemarks ??
-      src?.portfolio_revenue_remarks ??
-      null
-
-    return { tone_remarks, satisfaction_remarks, portfolio_remarks }
+    return {
+      tone_remarks: firstNonEmpty(...toneCandidates),
+      satisfaction_remarks: firstNonEmpty(...satisfactionCandidates),
+      portfolio_remarks: firstNonEmpty(...portfolioCandidates),
+    }
   }
 
   const addEvaluation = async (evaluationData: {
@@ -91,13 +105,11 @@ export function useEvaluations() {
     satisfaction_remarks?: string
     portfolio_remarks?: string
     overall_remarks?: string
-    // we tolerate extra keys; normalization handles them
     [key: string]: any
   }) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
     try {
-      const { tone_remarks, satisfaction_remarks, portfolio_remarks } =
-        normalizeRemarks(evaluationData)
+      const aliases = normalizeRemarks(evaluationData)
 
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
@@ -107,13 +119,16 @@ export function useEvaluations() {
         p_relevance_score: evaluationData.relevance_score,
         p_client_satisfaction_score: evaluationData.client_satisfaction_score,
         p_portfolio_revenue_score: evaluationData.portfolio_revenue_score,
-        p_compliance_remarks: evaluationData.compliance_remarks ?? null,
-        p_tone_remarks: evaluationData.tone_remarks ?? tone_remarks,
-        p_relevance_remarks: evaluationData.relevance_remarks ?? null,
-        p_satisfaction_remarks: evaluationData.satisfaction_remarks ?? satisfaction_remarks,
-        p_portfolio_remarks: evaluationData.portfolio_remarks ?? portfolio_remarks,
-        p_overall_remarks: evaluationData.overall_remarks ?? null
+
+        // ensure undefined/"" -> null, prefer direct field if non-empty, else alias
+        p_compliance_remarks: firstNonEmpty(evaluationData.compliance_remarks) ,
+        p_tone_remarks: firstNonEmpty(evaluationData.tone_remarks, aliases.tone_remarks),
+        p_relevance_remarks: firstNonEmpty(evaluationData.relevance_remarks),
+        p_satisfaction_remarks: firstNonEmpty(evaluationData.satisfaction_remarks, aliases.satisfaction_remarks),
+        p_portfolio_remarks: firstNonEmpty(evaluationData.portfolio_remarks, aliases.portfolio_remarks),
+        p_overall_remarks: firstNonEmpty(evaluationData.overall_remarks),
       })
+
       if (error) throw error
       await fetchEvaluations()
       await fetchAlerts()
@@ -123,11 +138,13 @@ export function useEvaluations() {
     }
   }
 
-  const updateEvaluation = async (evaluationId: string, updates: Partial<AgentEvaluation> & { [key: string]: any }) => {
+  const updateEvaluation = async (
+    evaluationId: string,
+    updates: Partial<AgentEvaluation> & { [key: string]: any }
+  ) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can update evaluations')
     try {
-      const { tone_remarks, satisfaction_remarks, portfolio_remarks } =
-        normalizeRemarks(updates)
+      const aliases = normalizeRemarks(updates)
 
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
@@ -136,13 +153,15 @@ export function useEvaluations() {
         p_relevance_score: updates.relevance_score ?? null,
         p_client_satisfaction_score: updates.client_satisfaction_score ?? null,
         p_portfolio_revenue_score: updates.portfolio_revenue_score ?? null,
-        p_compliance_remarks: (updates as any).compliance_remarks ?? null,
-        p_tone_remarks: (updates as any).tone_remarks ?? tone_remarks,
-        p_relevance_remarks: (updates as any).relevance_remarks ?? null,
-        p_satisfaction_remarks: (updates as any).satisfaction_remarks ?? satisfaction_remarks,
-        p_portfolio_remarks: (updates as any).portfolio_remarks ?? portfolio_remarks,
-        p_overall_remarks: (updates as any).overall_remarks ?? null
+
+        p_compliance_remarks: firstNonEmpty((updates as any).compliance_remarks),
+        p_tone_remarks: firstNonEmpty((updates as any).tone_remarks, aliases.tone_remarks),
+        p_relevance_remarks: firstNonEmpty((updates as any).relevance_remarks),
+        p_satisfaction_remarks: firstNonEmpty((updates as any).satisfaction_remarks, aliases.satisfaction_remarks),
+        p_portfolio_remarks: firstNonEmpty((updates as any).portfolio_remarks, aliases.portfolio_remarks),
+        p_overall_remarks: firstNonEmpty((updates as any).overall_remarks),
       })
+
       if (error) throw error
       await fetchEvaluations()
       await fetchAlerts()
@@ -155,7 +174,11 @@ export function useEvaluations() {
   const deleteEvaluation = async (evaluationId: string) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can delete evaluations')
     try {
-      const { error } = await supabase.from('agent_evaluations').delete().eq('id', evaluationId)
+      const { error } = await supabase
+        .from('agent_evaluations')
+        .delete()
+        .eq('id', evaluationId)
+
       if (error) throw error
       setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
       await fetchAlerts()
@@ -187,7 +210,7 @@ export function useEvaluations() {
     alerts,
     loading,
     error,
-    canManage, // <— expose this
+    canManage,
     addEvaluation,
     updateEvaluation,
     deleteEvaluation,

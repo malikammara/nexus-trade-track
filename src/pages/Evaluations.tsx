@@ -43,23 +43,20 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-// helpers to normalize form payloads
+// -------- helpers to normalize form payloads --------
 const toYMD = (d: Date | string) => {
   if (!d) return null;
   if (typeof d === "string") {
-    // assume already YYYY-MM-DD or ISO
     return d.includes("T") ? d.split("T")[0] : d;
   }
   return new Date(d).toISOString().split("T")[0];
 };
 
-const nonEmpty = (v: unknown): v is string =>
-  typeof v === "string" && v.trim().length > 0;
+const isNonEmpty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+const firstNonEmpty = (...vals: Array<unknown>) => vals.find(isNonEmpty) ?? null;
+const orNull = (v: unknown) => (isNonEmpty(v) ? v.trim() : null);
 
-const firstNonEmpty = (...vals: Array<unknown>) =>
-  vals.find(nonEmpty) ?? null;
-
-// Map various possible input keys -> the canonical remark fields
+// Map various possible input keys -> canonical remark fields
 const extractRemarks = (src: any) => {
   const tone_remarks = firstNonEmpty(
     src?.tone_remarks,
@@ -70,7 +67,6 @@ const extractRemarks = (src: any) => {
     src?.remarks?.tone_clarity,
     src?.remarks?.toneClarity
   );
-
   const satisfaction_remarks = firstNonEmpty(
     src?.satisfaction_remarks,
     src?.client_satisfaction_remarks,
@@ -79,7 +75,6 @@ const extractRemarks = (src: any) => {
     src?.remarks?.client_satisfaction,
     src?.remarks?.clientSatisfaction
   );
-
   const portfolio_remarks = firstNonEmpty(
     src?.portfolio_remarks,
     src?.portfolio_revenue_remarks,
@@ -88,12 +83,9 @@ const extractRemarks = (src: any) => {
     src?.remarks?.portfolio_revenue,
     src?.remarks?.portfolioRevenue
   );
-
   return { tone_remarks, satisfaction_remarks, portfolio_remarks };
 };
-
-// Ensure empty strings end up as null in DB
-const orNull = (v: unknown) => (nonEmpty(v) ? (v as string).trim() : null);
+// ---------------------------------------------------
 
 export default function Evaluations() {
   const { toast } = useToast();
@@ -102,7 +94,7 @@ export default function Evaluations() {
     alerts,
     loading,
     error,
-    canManage, // from hook
+    canManage,         // from hook
     addEvaluation,
     updateEvaluation,
     deleteEvaluation,
@@ -112,11 +104,12 @@ export default function Evaluations() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvaluation, setSelectedEvaluation] = useState<AgentEvaluation | null>(null);
 
+  // ---------- ADD ----------
   const handleAddEvaluation = async (data: any) => {
     try {
       const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
 
-      await addEvaluation({
+      const payload = {
         agent_id: data.agent_id,
         week_start_date: toYMD(data.week_start_date)!,
         compliance_score: Number(data.compliance_score),
@@ -131,9 +124,17 @@ export default function Evaluations() {
         satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
         portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
         overall_remarks: orNull(data.overall_remarks),
-      });
+      };
 
-      toast({ title: "Evaluation Added", description: "Agent evaluation has been recorded successfully." });
+      // DEBUG: verify what's getting sent
+      console.log("ADD evaluation payload →", payload);
+
+      await addEvaluation(payload);
+
+      toast({
+        title: "Evaluation Added",
+        description: "Agent evaluation has been recorded successfully.",
+      });
     } catch (e) {
       toast({
         title: "Error",
@@ -143,12 +144,13 @@ export default function Evaluations() {
     }
   };
 
-  const handleUpdateEvaluation = async (data: any) => {
-    if (!selectedEvaluation) return;
+  // ---------- EDIT ----------
+  // IMPORTANT: take id explicitly; do NOT rely on selectedEvaluation state.
+  const handleUpdateEvaluation = async (id: string, data: any) => {
     try {
       const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
 
-      await updateEvaluation(selectedEvaluation.id, {
+      const payload = {
         compliance_score: data.compliance_score != null ? Number(data.compliance_score) : undefined,
         tone_clarity_score: data.tone_clarity_score != null ? Number(data.tone_clarity_score) : undefined,
         relevance_score: data.relevance_score != null ? Number(data.relevance_score) : undefined,
@@ -161,9 +163,17 @@ export default function Evaluations() {
         satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
         portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
         overall_remarks: orNull(data.overall_remarks),
-      });
+      };
 
-      toast({ title: "Evaluation Updated", description: "Agent evaluation has been updated successfully." });
+      // DEBUG: verify what's getting sent
+      console.log("UPDATE evaluation payload →", { id, ...payload });
+
+      await updateEvaluation(id, payload);
+
+      toast({
+        title: "Evaluation Updated",
+        description: "Agent evaluation has been updated successfully.",
+      });
     } catch (e) {
       toast({
         title: "Error",
@@ -370,9 +380,10 @@ export default function Evaluations() {
 
                   {canManage && (
                     <>
+                      {/* EDIT: pass id explicitly so handler uses the correct evaluation */}
                       <EvaluationForm
                         agents={agents}
-                        onSubmit={handleUpdateEvaluation}
+                        onSubmit={(formData) => handleUpdateEvaluation(evaluation.id, formData)}
                         evaluation={evaluation}
                         isEditing
                       />

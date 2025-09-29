@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+  import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { AgentEvaluation, EvaluationAlert } from '@/types'
+import type { AgentEvaluation, EvaluationAlert } from '@/types'
 import { useAuth } from '@/contexts/AuthProvider'
 
 export function useEvaluations() {
@@ -16,12 +16,11 @@ export function useEvaluations() {
     try {
       setLoading(true)
       const { data, error } = await supabase.rpc('get_agent_evaluations', {
-        p_agent_id: agentId || null,
+        p_agent_id: agentId ?? null,
         p_limit: 50
       })
-
       if (error) throw error
-      setEvaluations(data || [])
+      setEvaluations(data ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -37,7 +36,7 @@ export function useEvaluations() {
         .order('total_score', { ascending: true })
 
       if (error) throw error
-      setAlerts(data || [])
+      setAlerts(data ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch alerts')
     }
@@ -59,7 +58,6 @@ export function useEvaluations() {
     overall_remarks?: string
   }) => {
     if (!isManager) throw new Error('Unauthorized: Only managers can add evaluations')
-
     try {
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
@@ -69,14 +67,13 @@ export function useEvaluations() {
         p_relevance_score: evaluationData.relevance_score,
         p_client_satisfaction_score: evaluationData.client_satisfaction_score,
         p_portfolio_revenue_score: evaluationData.portfolio_revenue_score,
-        p_compliance_remarks: evaluationData.compliance_remarks || null,
-        p_tone_remarks: evaluationData.tone_remarks || null,
-        p_relevance_remarks: evaluationData.relevance_remarks || null,
-        p_satisfaction_remarks: evaluationData.satisfaction_remarks || null,
-        p_portfolio_remarks: evaluationData.portfolio_remarks || null,
-        p_overall_remarks: evaluationData.overall_remarks || null
+        p_compliance_remarks: evaluationData.compliance_remarks ?? null,
+        p_tone_remarks: evaluationData.tone_remarks ?? null,
+        p_relevance_remarks: evaluationData.relevance_remarks ?? null,
+        p_satisfaction_remarks: evaluationData.satisfaction_remarks ?? null,
+        p_portfolio_remarks: evaluationData.portfolio_remarks ?? null,
+        p_overall_remarks: evaluationData.overall_remarks ?? null
       })
-
       if (error) throw error
       await fetchEvaluations()
       await fetchAlerts()
@@ -86,28 +83,23 @@ export function useEvaluations() {
     }
   }
 
-  const updateEvaluation = async (
-    evaluationId: string,
-    updates: Partial<AgentEvaluation>
-  ) => {
+  const updateEvaluation = async (evaluationId: string, updates: Partial<AgentEvaluation>) => {
     if (!isManager) throw new Error('Unauthorized: Only managers can update evaluations')
-
     try {
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
-        p_compliance_score: updates.compliance_score || null,
-        p_tone_clarity_score: updates.tone_clarity_score || null,
-        p_relevance_score: updates.relevance_score || null,
-        p_client_satisfaction_score: updates.client_satisfaction_score || null,
-        p_portfolio_revenue_score: updates.portfolio_revenue_score || null,
-        p_compliance_remarks: updates.compliance_remarks || null,
-        p_tone_remarks: updates.tone_remarks || null,
-        p_relevance_remarks: updates.relevance_remarks || null,
-        p_satisfaction_remarks: updates.satisfaction_remarks || null,
-        p_portfolio_remarks: updates.portfolio_remarks || null,
-        p_overall_remarks: updates.overall_remarks || null
+        p_compliance_score: updates.compliance_score ?? null,
+        p_tone_clarity_score: updates.tone_clarity_score ?? null,
+        p_relevance_score: updates.relevance_score ?? null,
+        p_client_satisfaction_score: updates.client_satisfaction_score ?? null,
+        p_portfolio_revenue_score: updates.portfolio_revenue_score ?? null,
+        p_compliance_remarks: updates.compliance_remarks ?? null,
+        p_tone_remarks: updates.tone_remarks ?? null,
+        p_relevance_remarks: updates.relevance_remarks ?? null,
+        p_satisfaction_remarks: updates.satisfaction_remarks ?? null,
+        p_portfolio_remarks: updates.portfolio_remarks ?? null,
+        p_overall_remarks: updates.overall_remarks ?? null
       })
-
       if (error) throw error
       await fetchEvaluations()
       await fetchAlerts()
@@ -119,15 +111,10 @@ export function useEvaluations() {
 
   const deleteEvaluation = async (evaluationId: string) => {
     if (!isManager) throw new Error('Unauthorized: Only managers can delete evaluations')
-
     try {
-      const { error } = await supabase
-        .from('agent_evaluations')
-        .delete()
-        .eq('id', evaluationId)
-
+      const { error } = await supabase.from('agent_evaluations').delete().eq('id', evaluationId)
       if (error) throw error
-      setEvaluations(prev => prev.filter(eval => eval.id !== evaluationId))
+      setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
       await fetchAlerts()
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to delete evaluation')
@@ -140,17 +127,16 @@ export function useEvaluations() {
         p_agent_id: agentId,
         p_limit: 20
       })
-
       if (error) throw error
-      return data || []
+      return data ?? []
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to get agent evaluations')
     }
   }
 
   useEffect(() => {
-    fetchEvaluations()
-    fetchAlerts()
+    void fetchEvaluations()
+    void fetchAlerts()
   }, [])
 
   return {

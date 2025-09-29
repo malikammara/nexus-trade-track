@@ -31,83 +31,84 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // tiny cn
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-// -------- helpers to normalize form payloads --------
+/** ---------- STRICT REMARK MAPPERS (page-level) ---------- **/
+const isNonEmpty = (v: any): v is string => typeof v === "string" && v.trim().length > 0;
+const orNull = (v: any) => (isNonEmpty(v) ? v.trim() : null);
+const firstNonEmpty = (...vals: any[]) => vals.find(isNonEmpty) ?? null;
+
+// Pull values from *any* of these keys (flat or nested) and normalize to the 3 canonical fields.
+function extractToneRemarks(d: any) {
+  return firstNonEmpty(
+    d?.tone_remarks,
+    d?.toneRemarks,
+    d?.tone_clarity_remarks,
+    d?.toneClarityRemarks,
+    d?.toneClarityNotes,
+    d?.tone_notes,
+    d?.toneNotes,
+    d?.toneAndClarityRemarks,
+    d?.tone_and_clarity_remarks,
+    d?.remarks?.tone,
+    d?.remarks?.tone_clarity,
+    d?.remarks?.toneClarity
+  );
+}
+function extractSatisfactionRemarks(d: any) {
+  return firstNonEmpty(
+    d?.satisfaction_remarks,
+    d?.client_satisfaction_remarks,
+    d?.clientSatisfactionRemarks,
+    d?.clientSatisfactionNotes,
+    d?.csatRemarks,
+    d?.clientRemarks,
+    d?.remarks?.satisfaction,
+    d?.remarks?.client_satisfaction,
+    d?.remarks?.clientSatisfaction
+  );
+}
+function extractPortfolioRemarks(d: any) {
+  return firstNonEmpty(
+    d?.portfolio_remarks,
+    d?.portfolio_revenue_remarks,
+    d?.portfolioRevenueRemarks,
+    d?.portfolioNotes,
+    d?.portfolioAndRevenueRemarks,
+    d?.portfolio_revenue_notes,
+    d?.remarks?.portfolio,
+    d?.remarks?.portfolio_revenue,
+    d?.remarks?.portfolioRevenue
+  );
+}
+
+// date → "YYYY-MM-DD"
 const toYMD = (d: Date | string) => {
   if (!d) return null;
-  if (typeof d === "string") {
-    return d.includes("T") ? d.split("T")[0] : d;
-  }
+  if (typeof d === "string") return d.includes("T") ? d.split("T")[0] : d;
   return new Date(d).toISOString().split("T")[0];
 };
-
-const isNonEmpty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const firstNonEmpty = (...vals: Array<unknown>) => vals.find(isNonEmpty) ?? null;
-const orNull = (v: unknown) => (isNonEmpty(v) ? v.trim() : null);
-
-// Map various possible input keys -> canonical remark fields
-const extractRemarks = (src: any) => {
-  const tone_remarks = firstNonEmpty(
-    src?.tone_remarks,
-    src?.toneRemarks,
-    src?.tone_clarity_remarks,
-    src?.toneClarityRemarks,
-    src?.remarks?.tone,
-    src?.remarks?.tone_clarity,
-    src?.remarks?.toneClarity
-  );
-  const satisfaction_remarks = firstNonEmpty(
-    src?.satisfaction_remarks,
-    src?.client_satisfaction_remarks,
-    src?.clientSatisfactionRemarks,
-    src?.remarks?.satisfaction,
-    src?.remarks?.client_satisfaction,
-    src?.remarks?.clientSatisfaction
-  );
-  const portfolio_remarks = firstNonEmpty(
-    src?.portfolio_remarks,
-    src?.portfolio_revenue_remarks,
-    src?.portfolioRevenueRemarks,
-    src?.remarks?.portfolio,
-    src?.remarks?.portfolio_revenue,
-    src?.remarks?.portfolioRevenue
-  );
-  return { tone_remarks, satisfaction_remarks, portfolio_remarks };
-};
-// ---------------------------------------------------
+/** -------------------------------------------------------- **/
 
 export default function Evaluations() {
   const { toast } = useToast();
-  const {
-    evaluations,
-    alerts,
-    loading,
-    error,
-    canManage,         // from hook
-    addEvaluation,
-    updateEvaluation,
-    deleteEvaluation,
-  } = useEvaluations();
+  const { evaluations, alerts, loading, error, canManage, addEvaluation, updateEvaluation, deleteEvaluation } = useEvaluations();
   const { agents } = useAgents();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvaluation, setSelectedEvaluation] = useState<AgentEvaluation | null>(null);
 
-  // ---------- ADD ----------
+  // ADD with strict remark mapping
   const handleAddEvaluation = async (data: any) => {
     try {
-      const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
+      const tone = orNull(extractToneRemarks(data)) ?? orNull(data?.tone_remarks);
+      const sat = orNull(extractSatisfactionRemarks(data)) ?? orNull(data?.satisfaction_remarks);
+      const port = orNull(extractPortfolioRemarks(data)) ?? orNull(data?.portfolio_remarks);
 
       const payload = {
         agent_id: data.agent_id,
@@ -117,38 +118,33 @@ export default function Evaluations() {
         relevance_score: Number(data.relevance_score),
         client_satisfaction_score: Number(data.client_satisfaction_score),
         portfolio_revenue_score: Number(data.portfolio_revenue_score),
-
         compliance_remarks: orNull(data.compliance_remarks),
-        tone_remarks: orNull(data.tone_remarks) ?? tone_remarks,
+        tone_remarks: tone,
         relevance_remarks: orNull(data.relevance_remarks),
-        satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
-        portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
+        satisfaction_remarks: sat,
+        portfolio_remarks: port,
         overall_remarks: orNull(data.overall_remarks),
       };
 
-      // DEBUG: verify what's getting sent
-      console.log("ADD evaluation payload →", payload);
-
+      console.log("ADD payload →", payload); // verify in console
       await addEvaluation(payload);
 
-      toast({
-        title: "Evaluation Added",
-        description: "Agent evaluation has been recorded successfully.",
-      });
+      toast({ title: "Evaluation Added", description: "Agent evaluation has been recorded successfully." });
     } catch (e) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Failed to add evaluation. Please try again.",
+        description: e instanceof Error ? e.message : "Failed to add evaluation.",
         variant: "destructive",
       });
     }
   };
 
-  // ---------- EDIT ----------
-  // IMPORTANT: take id explicitly; do NOT rely on selectedEvaluation state.
+  // EDIT with strict remark mapping (pass id explicitly)
   const handleUpdateEvaluation = async (id: string, data: any) => {
     try {
-      const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
+      const tone = orNull(extractToneRemarks(data)) ?? orNull(data?.tone_remarks);
+      const sat = orNull(extractSatisfactionRemarks(data)) ?? orNull(data?.satisfaction_remarks);
+      const port = orNull(extractPortfolioRemarks(data)) ?? orNull(data?.portfolio_remarks);
 
       const payload = {
         compliance_score: data.compliance_score != null ? Number(data.compliance_score) : undefined,
@@ -156,28 +152,22 @@ export default function Evaluations() {
         relevance_score: data.relevance_score != null ? Number(data.relevance_score) : undefined,
         client_satisfaction_score: data.client_satisfaction_score != null ? Number(data.client_satisfaction_score) : undefined,
         portfolio_revenue_score: data.portfolio_revenue_score != null ? Number(data.portfolio_revenue_score) : undefined,
-
         compliance_remarks: orNull(data.compliance_remarks),
-        tone_remarks: orNull(data.tone_remarks) ?? tone_remarks,
+        tone_remarks: tone,
         relevance_remarks: orNull(data.relevance_remarks),
-        satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
-        portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
+        satisfaction_remarks: sat,
+        portfolio_remarks: port,
         overall_remarks: orNull(data.overall_remarks),
       };
 
-      // DEBUG: verify what's getting sent
-      console.log("UPDATE evaluation payload →", { id, ...payload });
-
+      console.log("UPDATE payload →", { id, ...payload }); // verify in console
       await updateEvaluation(id, payload);
 
-      toast({
-        title: "Evaluation Updated",
-        description: "Agent evaluation has been updated successfully.",
-      });
+      toast({ title: "Evaluation Updated", description: "Agent evaluation has been updated successfully." });
     } catch (e) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Failed to update evaluation. Please try again.",
+        description: e instanceof Error ? e.message : "Failed to update evaluation.",
         variant: "destructive",
       });
     }
@@ -190,7 +180,7 @@ export default function Evaluations() {
     } catch (e) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Failed to delete evaluation. Please try again.",
+        description: e instanceof Error ? e.message : "Failed to delete evaluation.",
         variant: "destructive",
       });
     }
@@ -199,9 +189,7 @@ export default function Evaluations() {
   const filteredEvaluations = useMemo(() => {
     const q = searchTerm.toLowerCase();
     return evaluations.filter(
-      (e) =>
-        e.agent_name?.toLowerCase().includes(q) ||
-        e.agent_email?.toLowerCase().includes(q)
+      (e) => e.agent_name?.toLowerCase().includes(q) || e.agent_email?.toLowerCase().includes(q)
     );
   }, [evaluations, searchTerm]);
 
@@ -225,9 +213,7 @@ export default function Evaluations() {
           <p className="text-muted-foreground">Weekly performance evaluations and coaching alerts for CS team agents</p>
         </div>
 
-        {canManage && (
-          <EvaluationForm agents={agents} onSubmit={handleAddEvaluation} />
-        )}
+        {canManage && <EvaluationForm agents={agents} onSubmit={handleAddEvaluation} />}
       </div>
 
       {/* Alert Summary */}
@@ -380,7 +366,7 @@ export default function Evaluations() {
 
                   {canManage && (
                     <>
-                      {/* EDIT: pass id explicitly so handler uses the correct evaluation */}
+                      {/* IMPORTANT: pass id explicitly to update */}
                       <EvaluationForm
                         agents={agents}
                         onSubmit={(formData) => handleUpdateEvaluation(evaluation.id, formData)}
@@ -397,8 +383,7 @@ export default function Evaluations() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Evaluation</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete this evaluation for{" "}
-                              {evaluation.agent_name}?
+                              Are you sure you want to delete this evaluation for {evaluation.agent_name}?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -431,17 +416,10 @@ export default function Evaluations() {
       )}
 
       {/* Evaluation Details Dialog */}
-      <Dialog
-        open={!!selectedEvaluation}
-        onOpenChange={(open) => {
-          if (!open) setSelectedEvaluation(null);
-        }}
-      >
+      <Dialog open={!!selectedEvaluation} onOpenChange={(open) => { if (!open) setSelectedEvaluation(null); }}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              Evaluation Details - {selectedEvaluation?.agent_name}
-            </DialogTitle>
+            <DialogTitle>Evaluation Details - {selectedEvaluation?.agent_name}</DialogTitle>
             {selectedEvaluation && (
               <p className="text-sm text-muted-foreground">
                 Week of {format(new Date(selectedEvaluation.week_start_date), "MMM dd, yyyy")}

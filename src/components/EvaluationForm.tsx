@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon, Plus, Edit, ClipboardList } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus, CreditCard as Edit, ClipboardList } from 'lucide-react'
 import { format, startOfWeek, addDays } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Agent, AgentEvaluation } from '@/types'

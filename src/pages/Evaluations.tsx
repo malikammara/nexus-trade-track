@@ -3,18 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  ClipboardList,
-  Search,
-  AlertTriangle,
-  CheckCircle,
-  Award,
-  TrendingUp,
-  Calendar,
-  Loader2,
-  Trash2,
-  Eye,
-} from "lucide-react";
+import { ClipboardList, Search, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Award, TrendingUp, Calendar, Loader as Loader2, Trash2, Eye } from "lucide-react";
 import { AgentEvaluation, EvaluationAlert } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useEvaluations } from "@/hooks/useEvaluations";

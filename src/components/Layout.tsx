@@ -3,17 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
-import { 
-  BarChart3, 
-  Users, 
-  UserCheck,
-  Search, 
-  TrendingUp,
-  Calculator,
-  ClipboardList,
-  Menu,
-  X
-} from "lucide-react";
+import { ChartBar as BarChart3, Users, UserCheck, Search, TrendingUp, Calculator, ClipboardList, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 

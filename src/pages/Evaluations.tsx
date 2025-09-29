@@ -3,13 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardList, Search, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Award, TrendingUp, Calendar, Loader as Loader2, Trash2, Eye } from "lucide-react";
-import { AgentEvaluation, EvaluationAlert } from "@/types";
+import {
+  ClipboardList,
+  Search,
+  TriangleAlert as AlertTriangle,
+  CircleCheck as CheckCircle,
+  Award,
+  TrendingUp,
+  Loader as Loader2,
+  Trash2,
+  Eye,
+} from "lucide-react";
+import type { AgentEvaluation } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useEvaluations } from "@/hooks/useEvaluations";
 import { useAgents } from "@/hooks/useAgents";
 import { EvaluationForm } from "@/components/EvaluationForm";
-import { format, startOfWeek } from "date-fns";
+import { format } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,14 +36,28 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+
+// Minimal local cn helper so there’s no missing import.
+// (If you already have "@/lib/utils", you can delete this and import { cn } from there.)
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 export default function Evaluations() {
   const { toast } = useToast();
-  const { evaluations, alerts, loading, error, isManager, addEvaluation, updateEvaluation, deleteEvaluation } = useEvaluations();
+  const {
+    evaluations,
+    alerts,
+    loading,
+    error,
+    isManager,
+    addEvaluation,
+    updateEvaluation,
+    deleteEvaluation,
+  } = useEvaluations();
   const { agents } = useAgents();
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvaluation, setSelectedEvaluation] = useState<AgentEvaluation | null>(null);
 
@@ -41,7 +65,7 @@ export default function Evaluations() {
     try {
       await addEvaluation({
         agent_id: data.agent_id,
-        week_start_date: data.week_start_date.toISOString().split('T')[0],
+        week_start_date: data.week_start_date.toISOString().split("T")[0],
         compliance_score: data.compliance_score,
         tone_clarity_score: data.tone_clarity_score,
         relevance_score: data.relevance_score,
@@ -58,7 +82,7 @@ export default function Evaluations() {
         title: "Evaluation Added",
         description: "Agent evaluation has been recorded successfully.",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to add evaluation. Please try again.",
@@ -69,7 +93,6 @@ export default function Evaluations() {
 
   const handleUpdateEvaluation = async (data: any) => {
     if (!selectedEvaluation) return;
-    
     try {
       await updateEvaluation(selectedEvaluation.id, {
         compliance_score: data.compliance_score,
@@ -88,7 +111,7 @@ export default function Evaluations() {
         title: "Evaluation Updated",
         description: "Agent evaluation has been updated successfully.",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update evaluation. Please try again.",
@@ -104,7 +127,7 @@ export default function Evaluations() {
         title: "Evaluation Deleted",
         description: "Agent evaluation has been deleted successfully.",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete evaluation. Please try again.",
@@ -114,9 +137,11 @@ export default function Evaluations() {
   };
 
   const filteredEvaluations = useMemo(() => {
-    return evaluations.filter((evaluation) =>
-      evaluation.agent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evaluation.agent_email?.toLowerCase().includes(searchTerm.toLowerCase())
+    const q = searchTerm.toLowerCase();
+    return evaluations.filter(
+      (e) =>
+        e.agent_name?.toLowerCase().includes(q) ||
+        e.agent_email?.toLowerCase().includes(q)
     );
   }, [evaluations, searchTerm]);
 
@@ -127,9 +152,9 @@ export default function Evaluations() {
     return { variant: "default" as const, icon: Award, text: "Excellent" };
   };
 
-  const criticalAlerts = alerts.filter(a => a.alert_level === 'critical');
-  const warningAlerts = alerts.filter(a => a.alert_level === 'warning');
-  const excellentPerformers = alerts.filter(a => a.alert_level === 'excellent');
+  const criticalAlerts = alerts.filter((a) => a.alert_level === "critical");
+  const warningAlerts = alerts.filter((a) => a.alert_level === "warning");
+  const excellentPerformers = alerts.filter((a) => a.alert_level === "excellent");
 
   return (
     <div className="space-y-6">
@@ -141,12 +166,9 @@ export default function Evaluations() {
             Weekly performance evaluations and coaching alerts for CS team agents
           </p>
         </div>
-        
+
         {isManager && (
-          <EvaluationForm 
-            agents={agents} 
-            onSubmit={handleAddEvaluation}
-          />
+          <EvaluationForm agents={agents} onSubmit={handleAddEvaluation} />
         )}
       </div>
 
@@ -216,7 +238,9 @@ export default function Evaluations() {
         </div>
       )}
       {error && (
-        <div className="text-destructive text-sm">Failed to load evaluations. Please refresh.</div>
+        <div className="text-destructive text-sm">
+          Failed to load evaluations. Please refresh.
+        </div>
       )}
 
       {/* Evaluations List */}
@@ -224,10 +248,10 @@ export default function Evaluations() {
         {filteredEvaluations.map((evaluation) => {
           const alertBadge = getAlertBadge(evaluation.total_score);
           const AlertIcon = alertBadge.icon;
-          
+
           return (
-            <Card 
-              key={evaluation.id} 
+            <Card
+              key={evaluation.id}
               className={cn(
                 "shadow-card hover:shadow-elegant transition-shadow",
                 evaluation.total_score <= 15 && "border-destructive bg-destructive/5",
@@ -264,7 +288,7 @@ export default function Evaluations() {
                     <span className="font-medium">{evaluation.compliance_score}/5</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tone & Clarity:</span>
+                    <span className="text-muted-foreground">Tone &amp; Clarity:</span>
                     <span className="font-medium">{evaluation.tone_clarity_score}/5</span>
                   </div>
                   <div className="flex justify-between">
@@ -299,7 +323,7 @@ export default function Evaluations() {
                     <Eye className="h-4 w-4 mr-1" />
                     View Details
                   </Button>
-                  
+
                   {isManager && (
                     <>
                       <EvaluationForm
@@ -310,7 +334,7 @@ export default function Evaluations() {
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" aria-label="Delete evaluation">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
@@ -318,7 +342,8 @@ export default function Evaluations() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Evaluation</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete this evaluation for {evaluation.agent_name}?
+                              Are you sure you want to delete this evaluation for{" "}
+                              {evaluation.agent_name}?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -351,15 +376,22 @@ export default function Evaluations() {
       )}
 
       {/* Evaluation Details Dialog */}
-      <Dialog open={!!selectedEvaluation} onOpenChange={() => setSelectedEvaluation(null)}>
+      <Dialog
+        open={!!selectedEvaluation}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEvaluation(null);
+        }}
+      >
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Evaluation Details - {selectedEvaluation?.agent_name}
             </DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Week of {selectedEvaluation && format(new Date(selectedEvaluation.week_start_date), "MMM dd, yyyy")}
-            </p>
+            {selectedEvaluation && (
+              <p className="text-sm text-muted-foreground">
+                Week of {format(new Date(selectedEvaluation.week_start_date), "MMM dd, yyyy")}
+              </p>
+            )}
           </DialogHeader>
 
           {selectedEvaluation && (
@@ -376,7 +408,7 @@ export default function Evaluations() {
               {/* Detailed Scores */}
               <div className="space-y-4">
                 <h4 className="font-medium">Detailed Scores</h4>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
@@ -395,7 +427,7 @@ export default function Evaluations() {
 
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium">Tone & Clarity</p>
+                      <p className="font-medium">Tone &amp; Clarity</p>
                       <p className="text-sm text-muted-foreground">
                         Professional, polite, confident, clear communication
                       </p>
@@ -440,7 +472,7 @@ export default function Evaluations() {
 
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium">Portfolio & Revenue Impact</p>
+                      <p className="font-medium">Portfolio &amp; Revenue Impact</p>
                       <p className="text-sm text-muted-foreground">
                         Equity trends, NOTs achieved, retention efforts
                       </p>

@@ -1,7 +1,17 @@
-  import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { AgentEvaluation, EvaluationAlert } from '@/types'
 import { useAuth } from '@/contexts/AuthProvider'
+
+/**
+ * Admin model:
+ * - Prefer the isAdmin flag from your AuthProvider (e.g., from user metadata).
+ * - Fallback to an allowlist (emails) for local dev or when metadata is missing.
+ */
+const ADMIN_EMAIL_ALLOWLIST = new Set([
+  'syedyousufhussainzaidi@gmail.com',
+  'doctorcrack007@gmail.com',
+])
 
 export function useEvaluations() {
   const [evaluations, setEvaluations] = useState<AgentEvaluation[]>([])
@@ -10,7 +20,8 @@ export function useEvaluations() {
   const [error, setError] = useState<string | null>(null)
   const { user, isAdmin } = useAuth()
 
-  const isManager = user?.email === 'syedyousufhussainzaidi@gmail.com' || user?.email === 'doctorcrack007@gmail.com'
+  const canManage =
+    !!isAdmin || (user?.email ? ADMIN_EMAIL_ALLOWLIST.has(user.email) : false)
 
   const fetchEvaluations = async (agentId?: string) => {
     try {
@@ -57,7 +68,7 @@ export function useEvaluations() {
     portfolio_remarks?: string
     overall_remarks?: string
   }) => {
-    if (!isManager) throw new Error('Unauthorized: Only managers can add evaluations')
+    if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
     try {
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
@@ -84,7 +95,7 @@ export function useEvaluations() {
   }
 
   const updateEvaluation = async (evaluationId: string, updates: Partial<AgentEvaluation>) => {
-    if (!isManager) throw new Error('Unauthorized: Only managers can update evaluations')
+    if (!canManage) throw new Error('Unauthorized: Only admins can update evaluations')
     try {
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
@@ -110,7 +121,7 @@ export function useEvaluations() {
   }
 
   const deleteEvaluation = async (evaluationId: string) => {
-    if (!isManager) throw new Error('Unauthorized: Only managers can delete evaluations')
+    if (!canManage) throw new Error('Unauthorized: Only admins can delete evaluations')
     try {
       const { error } = await supabase.from('agent_evaluations').delete().eq('id', evaluationId)
       if (error) throw error
@@ -144,7 +155,7 @@ export function useEvaluations() {
     alerts,
     loading,
     error,
-    isManager,
+    canManage, // <— expose this
     addEvaluation,
     updateEvaluation,
     deleteEvaluation,

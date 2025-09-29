@@ -38,8 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// Minimal local cn helper so there’s no missing import.
-// (If you already have "@/lib/utils", you can delete this and import { cn } from there.)
+// tiny cn
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -51,7 +50,7 @@ export default function Evaluations() {
     alerts,
     loading,
     error,
-    isManager,
+    canManage,         // <— from hook
     addEvaluation,
     updateEvaluation,
     deleteEvaluation,
@@ -78,16 +77,9 @@ export default function Evaluations() {
         portfolio_remarks: data.portfolio_remarks,
         overall_remarks: data.overall_remarks,
       });
-      toast({
-        title: "Evaluation Added",
-        description: "Agent evaluation has been recorded successfully.",
-      });
+      toast({ title: "Evaluation Added", description: "Agent evaluation has been recorded successfully." });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to add evaluation. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to add evaluation. Please try again.", variant: "destructive" });
     }
   };
 
@@ -107,32 +99,18 @@ export default function Evaluations() {
         portfolio_remarks: data.portfolio_remarks,
         overall_remarks: data.overall_remarks,
       });
-      toast({
-        title: "Evaluation Updated",
-        description: "Agent evaluation has been updated successfully.",
-      });
+      toast({ title: "Evaluation Updated", description: "Agent evaluation has been updated successfully." });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to update evaluation. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update evaluation. Please try again.", variant: "destructive" });
     }
   };
 
   const handleDeleteEvaluation = async (evaluation: AgentEvaluation) => {
     try {
       await deleteEvaluation(evaluation.id);
-      toast({
-        title: "Evaluation Deleted",
-        description: "Agent evaluation has been deleted successfully.",
-      });
+      toast({ title: "Evaluation Deleted", description: "Agent evaluation has been deleted successfully." });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to delete evaluation. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to delete evaluation. Please try again.", variant: "destructive" });
     }
   };
 
@@ -162,12 +140,10 @@ export default function Evaluations() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Agent Evaluations</h1>
-          <p className="text-muted-foreground">
-            Weekly performance evaluations and coaching alerts for CS team agents
-          </p>
+          <p className="text-muted-foreground">Weekly performance evaluations and coaching alerts for CS team agents</p>
         </div>
 
-        {isManager && (
+        {canManage && (
           <EvaluationForm agents={agents} onSubmit={handleAddEvaluation} />
         )}
       </div>
@@ -237,11 +213,7 @@ export default function Evaluations() {
           Loading evaluations...
         </div>
       )}
-      {error && (
-        <div className="text-destructive text-sm">
-          Failed to load evaluations. Please refresh.
-        </div>
-      )}
+      {error && <div className="text-destructive text-sm">Failed to load evaluations. Please refresh.</div>}
 
       {/* Evaluations List */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -324,7 +296,7 @@ export default function Evaluations() {
                     View Details
                   </Button>
 
-                  {isManager && (
+                  {canManage && (
                     <>
                       <EvaluationForm
                         agents={agents}
@@ -396,7 +368,6 @@ export default function Evaluations() {
 
           {selectedEvaluation && (
             <div className="space-y-6">
-              {/* Score Summary */}
               <div className="text-center p-4 bg-accent rounded-lg">
                 <div className="text-4xl font-bold mb-2">{selectedEvaluation.total_score}</div>
                 <div className="text-sm text-muted-foreground mb-2">out of 25</div>
@@ -405,17 +376,13 @@ export default function Evaluations() {
                 </Badge>
               </div>
 
-              {/* Detailed Scores */}
               <div className="space-y-4">
                 <h4 className="font-medium">Detailed Scores</h4>
-
                 <div className="space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">Compliance</p>
-                      <p className="text-sm text-muted-foreground">
-                        Calls via company lines, SOP followed, privacy ensured
-                      </p>
+                      <p className="text-sm text-muted-foreground">Calls via company lines, SOP followed, privacy ensured</p>
                       {selectedEvaluation.compliance_remarks && (
                         <p className="text-sm text-blue-600 mt-1">
                           <strong>Remarks:</strong> {selectedEvaluation.compliance_remarks}
@@ -428,9 +395,7 @@ export default function Evaluations() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">Tone &amp; Clarity</p>
-                      <p className="text-sm text-muted-foreground">
-                        Professional, polite, confident, clear communication
-                      </p>
+                      <p className="text-sm text-muted-foreground">Professional, polite, confident, clear communication</p>
                       {selectedEvaluation.tone_remarks && (
                         <p className="text-sm text-blue-600 mt-1">
                           <strong>Remarks:</strong> {selectedEvaluation.tone_remarks}
@@ -443,9 +408,7 @@ export default function Evaluations() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">Relevance</p>
-                      <p className="text-sm text-muted-foreground">
-                        Advice matches client needs, correct product use
-                      </p>
+                      <p className="text-sm text-muted-foreground">Advice matches client needs, correct product use</p>
                       {selectedEvaluation.relevance_remarks && (
                         <p className="text-sm text-blue-600 mt-1">
                           <strong>Remarks:</strong> {selectedEvaluation.relevance_remarks}
@@ -458,9 +421,7 @@ export default function Evaluations() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">Client Satisfaction</p>
-                      <p className="text-sm text-muted-foreground">
-                        Queries resolved, value delivered, client supported
-                      </p>
+                      <p className="text-sm text-muted-foreground">Queries resolved, value delivered, client supported</p>
                       {selectedEvaluation.satisfaction_remarks && (
                         <p className="text-sm text-blue-600 mt-1">
                           <strong>Remarks:</strong> {selectedEvaluation.satisfaction_remarks}
@@ -473,9 +434,7 @@ export default function Evaluations() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">Portfolio &amp; Revenue Impact</p>
-                      <p className="text-sm text-muted-foreground">
-                        Equity trends, NOTs achieved, retention efforts
-                      </p>
+                      <p className="text-sm text-muted-foreground">Equity trends, NOTs achieved, retention efforts</p>
                       {selectedEvaluation.portfolio_remarks && (
                         <p className="text-sm text-blue-600 mt-1">
                           <strong>Remarks:</strong> {selectedEvaluation.portfolio_remarks}
@@ -487,17 +446,17 @@ export default function Evaluations() {
                 </div>
               </div>
 
-              {/* Overall Remarks */}
-              {selectedEvaluation.overall_remarks && (
-                <div className="space-y-2">
-                  <h4 className="font-medium">Overall Remarks</h4>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm">{selectedEvaluation.overall_remarks}</p>
-                  </div>
-                </div>
-              )}
+              <div className="space-y-2">
+                {selectedEvaluation.overall_remarks && (
+                  <>
+                    <h4 className="font-medium">Overall Remarks</h4>
+                    <div className="p-3 bg-muted rounded-lg">
+                      <p className="text-sm">{selectedEvaluation.overall_remarks}</p>
+                    </div>
+                  </>
+                )}
+              </div>
 
-              {/* Evaluation Info */}
               <div className="pt-4 border-t border-border text-xs text-muted-foreground">
                 <p>Evaluated by: {selectedEvaluation.evaluated_by}</p>
                 <p>Date: {format(new Date(selectedEvaluation.created_at), "PPP 'at' p")}</p>

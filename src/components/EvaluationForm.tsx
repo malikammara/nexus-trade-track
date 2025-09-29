@@ -32,10 +32,17 @@ import {
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar as CalendarIcon, Plus, CreditCard as Edit, ClipboardList } from 'lucide-react'
-import { format, startOfWeek, addDays } from 'date-fns'
+import { format, startOfWeek } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Agent, AgentEvaluation } from '@/types'
 
+/** 
+ * IMPORTANT: include the three form field names that your UI actually uses:
+ * - tone_clarity_remarks
+ * - client_satisfaction_remarks
+ * - portfolio_revenue_remarks
+ * We will map them to canonical keys before submitting.
+ */
 const evaluationSchema = z.object({
   agent_id: z.string().min(1, 'Agent is required'),
   week_start_date: z.date(),
@@ -44,19 +51,27 @@ const evaluationSchema = z.object({
   relevance_score: z.number().min(1).max(5),
   client_satisfaction_score: z.number().min(1).max(5),
   portfolio_revenue_score: z.number().min(1).max(5),
+
+  // Remarks (UI field names)
   compliance_remarks: z.string().optional(),
-  tone_remarks: z.string().optional(),
+  tone_clarity_remarks: z.string().optional(),
   relevance_remarks: z.string().optional(),
+  client_satisfaction_remarks: z.string().optional(),
+  portfolio_revenue_remarks: z.string().optional(),
+  overall_remarks: z.string().optional(),
+
+  // (Optional) canonical keys in case something passes them directly
+  tone_remarks: z.string().optional(),
   satisfaction_remarks: z.string().optional(),
   portfolio_remarks: z.string().optional(),
-  overall_remarks: z.string().optional(),
 })
 
 type EvaluationFormData = z.infer<typeof evaluationSchema>
 
 interface EvaluationFormProps {
   agents: Agent[]
-  onSubmit: (data: EvaluationFormData) => Promise<void>
+  // accept any so we can pass mapped shape to parent without TS friction
+  onSubmit: (data: any) => Promise<void>
   evaluation?: AgentEvaluation
   isEditing?: boolean
 }
@@ -89,10 +104,15 @@ const criteria = [
   }
 ]
 
+// helpers
+const isNonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0
+const toYMD = (d: Date | string) => (typeof d === 'string' ? (d.includes('T') ? d.split('T')[0] : d) : new Date(d).toISOString().split('T')[0])
+
 export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false }: EvaluationFormProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  // Prefill: notice how we feed UI field names from canonical DB fields on edit
   const form = useForm<EvaluationFormData>({
     resolver: zodResolver(evaluationSchema),
     defaultValues: evaluation ? {
@@ -103,26 +123,37 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
       relevance_score: evaluation.relevance_score,
       client_satisfaction_score: evaluation.client_satisfaction_score,
       portfolio_revenue_score: evaluation.portfolio_revenue_score,
-      compliance_remarks: evaluation.compliance_remarks || '',
-      tone_remarks: evaluation.tone_remarks || '',
-      relevance_remarks: evaluation.relevance_remarks || '',
-      satisfaction_remarks: evaluation.satisfaction_remarks || '',
-      portfolio_remarks: evaluation.portfolio_remarks || '',
-      overall_remarks: evaluation.overall_remarks || '',
+
+      compliance_remarks: evaluation.compliance_remarks ?? '',
+      tone_clarity_remarks: evaluation.tone_remarks ?? '',              // map from canonical → UI
+      relevance_remarks: evaluation.relevance_remarks ?? '',
+      client_satisfaction_remarks: evaluation.satisfaction_remarks ?? '',// map from canonical → UI
+      portfolio_revenue_remarks: evaluation.portfolio_remarks ?? '',     // map from canonical → UI
+      overall_remarks: evaluation.overall_remarks ?? '',
+
+      // also allow canonical keys if parent supplies
+      tone_remarks: evaluation.tone_remarks ?? '',
+      satisfaction_remarks: evaluation.satisfaction_remarks ?? '',
+      portfolio_remarks: evaluation.portfolio_remarks ?? '',
     } : {
       agent_id: '',
-      week_start_date: startOfWeek(new Date(), { weekStartsOn: 1 }), // Monday
+      week_start_date: startOfWeek(new Date(), { weekStartsOn: 1 }),
       compliance_score: 3,
       tone_clarity_score: 3,
       relevance_score: 3,
       client_satisfaction_score: 3,
       portfolio_revenue_score: 3,
+
       compliance_remarks: '',
-      tone_remarks: '',
+      tone_clarity_remarks: '',
       relevance_remarks: '',
+      client_satisfaction_remarks: '',
+      portfolio_revenue_remarks: '',
+      overall_remarks: '',
+
+      tone_remarks: '',
       satisfaction_remarks: '',
       portfolio_remarks: '',
-      overall_remarks: '',
     }
   })
 
@@ -148,7 +179,26 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
   const handleSubmit = async (data: EvaluationFormData) => {
     setLoading(true)
     try {
-      await onSubmit(data)
+      // Map UI field names → canonical names expected by your page/hook/DB function
+      const mapped = {
+        ...data,
+        week_start_date: data.week_start_date, // keep Date; page converts to YYYY-MM-DD
+        tone_remarks: isNonEmpty(data.tone_remarks) ? data.tone_remarks : (isNonEmpty(data.tone_clarity_remarks) ? data.tone_clarity_remarks.trim() : ''),
+        satisfaction_remarks: isNonEmpty(data.satisfaction_remarks) ? data.satisfaction_remarks : (isNonEmpty(data.client_satisfaction_remarks) ? data.client_satisfaction_remarks.trim() : ''),
+        portfolio_remarks: isNonEmpty(data.portfolio_remarks) ? data.portfolio_remarks : (isNonEmpty(data.portfolio_revenue_remarks) ? data.portfolio_revenue_remarks.trim() : ''),
+      }
+
+      // Optional: log exactly what leaves the form
+      console.log('EvaluationForm → submit payload', {
+        tone_remarks: mapped.tone_remarks,
+        satisfaction_remarks: mapped.satisfaction_remarks,
+        portfolio_remarks: mapped.portfolio_remarks,
+        compliance_remarks: mapped.compliance_remarks,
+        relevance_remarks: mapped.relevance_remarks,
+        overall_remarks: mapped.overall_remarks,
+      })
+
+      await onSubmit(mapped)
       setOpen(false)
       form.reset()
     } catch (error) {
@@ -240,7 +290,6 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
                           selected={field.value}
                           onSelect={(date) => {
                             if (date) {
-                              // Set to Monday of the selected week
                               const monday = startOfWeek(date, { weekStartsOn: 1 })
                               field.onChange(monday)
                             }
@@ -259,11 +308,13 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
             </div>
 
             {/* Score Summary */}
-            <div className={cn("p-4 rounded-lg border-2", performance.bg)}>
+            <div className={cn("p-4 rounded-lg border-2", getPerformanceLevel(totalScore).bg)}>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">Current Total Score</h3>
-                  <p className={cn("text-sm", performance.color)}>{performance.level}</p>
+                  <p className={cn("text-sm", getPerformanceLevel(totalScore).color)}>
+                    {getPerformanceLevel(totalScore).level}
+                  </p>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold">{totalScore}</div>

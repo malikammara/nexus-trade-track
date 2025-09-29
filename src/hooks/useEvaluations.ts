@@ -53,6 +53,30 @@ export function useEvaluations() {
     }
   }
 
+  // Helper to normalize possible field names coming from forms
+  const normalizeRemarks = (src: any) => {
+    const tone_remarks =
+      src?.tone_remarks ??
+      src?.toneRemarks ??
+      src?.toneClarityRemarks ??
+      src?.tone_clarity_remarks ??
+      null
+
+    const satisfaction_remarks =
+      src?.satisfaction_remarks ??
+      src?.clientSatisfactionRemarks ??
+      src?.client_satisfaction_remarks ??
+      null
+
+    const portfolio_remarks =
+      src?.portfolio_remarks ??
+      src?.portfolioRevenueRemarks ??
+      src?.portfolio_revenue_remarks ??
+      null
+
+    return { tone_remarks, satisfaction_remarks, portfolio_remarks }
+  }
+
   const addEvaluation = async (evaluationData: {
     agent_id: string
     week_start_date: string
@@ -67,9 +91,14 @@ export function useEvaluations() {
     satisfaction_remarks?: string
     portfolio_remarks?: string
     overall_remarks?: string
+    // we tolerate extra keys; normalization handles them
+    [key: string]: any
   }) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
     try {
+      const { tone_remarks, satisfaction_remarks, portfolio_remarks } =
+        normalizeRemarks(evaluationData)
+
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
         p_week_start_date: evaluationData.week_start_date,
@@ -79,10 +108,10 @@ export function useEvaluations() {
         p_client_satisfaction_score: evaluationData.client_satisfaction_score,
         p_portfolio_revenue_score: evaluationData.portfolio_revenue_score,
         p_compliance_remarks: evaluationData.compliance_remarks ?? null,
-        p_tone_remarks: evaluationData.tone_remarks ?? null,
+        p_tone_remarks: evaluationData.tone_remarks ?? tone_remarks,
         p_relevance_remarks: evaluationData.relevance_remarks ?? null,
-        p_satisfaction_remarks: evaluationData.satisfaction_remarks ?? null,
-        p_portfolio_remarks: evaluationData.portfolio_remarks ?? null,
+        p_satisfaction_remarks: evaluationData.satisfaction_remarks ?? satisfaction_remarks,
+        p_portfolio_remarks: evaluationData.portfolio_remarks ?? portfolio_remarks,
         p_overall_remarks: evaluationData.overall_remarks ?? null
       })
       if (error) throw error
@@ -94,9 +123,12 @@ export function useEvaluations() {
     }
   }
 
-  const updateEvaluation = async (evaluationId: string, updates: Partial<AgentEvaluation>) => {
+  const updateEvaluation = async (evaluationId: string, updates: Partial<AgentEvaluation> & { [key: string]: any }) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can update evaluations')
     try {
+      const { tone_remarks, satisfaction_remarks, portfolio_remarks } =
+        normalizeRemarks(updates)
+
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
         p_compliance_score: updates.compliance_score ?? null,
@@ -104,12 +136,12 @@ export function useEvaluations() {
         p_relevance_score: updates.relevance_score ?? null,
         p_client_satisfaction_score: updates.client_satisfaction_score ?? null,
         p_portfolio_revenue_score: updates.portfolio_revenue_score ?? null,
-        p_compliance_remarks: updates.compliance_remarks ?? null,
-        p_tone_remarks: updates.tone_remarks ?? null,
-        p_relevance_remarks: updates.relevance_remarks ?? null,
-        p_satisfaction_remarks: updates.satisfaction_remarks ?? null,
-        p_portfolio_remarks: updates.portfolio_remarks ?? null,
-        p_overall_remarks: updates.overall_remarks ?? null
+        p_compliance_remarks: (updates as any).compliance_remarks ?? null,
+        p_tone_remarks: (updates as any).tone_remarks ?? tone_remarks,
+        p_relevance_remarks: (updates as any).relevance_remarks ?? null,
+        p_satisfaction_remarks: (updates as any).satisfaction_remarks ?? satisfaction_remarks,
+        p_portfolio_remarks: (updates as any).portfolio_remarks ?? portfolio_remarks,
+        p_overall_remarks: (updates as any).overall_remarks ?? null
       })
       if (error) throw error
       await fetchEvaluations()

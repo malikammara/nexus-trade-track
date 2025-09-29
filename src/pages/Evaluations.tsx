@@ -43,6 +43,58 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+// helpers to normalize form payloads
+const toYMD = (d: Date | string) => {
+  if (!d) return null;
+  if (typeof d === "string") {
+    // assume already YYYY-MM-DD or ISO
+    return d.includes("T") ? d.split("T")[0] : d;
+  }
+  return new Date(d).toISOString().split("T")[0];
+};
+
+const nonEmpty = (v: unknown): v is string =>
+  typeof v === "string" && v.trim().length > 0;
+
+const firstNonEmpty = (...vals: Array<unknown>) =>
+  vals.find(nonEmpty) ?? null;
+
+// Map various possible input keys -> the canonical remark fields
+const extractRemarks = (src: any) => {
+  const tone_remarks = firstNonEmpty(
+    src?.tone_remarks,
+    src?.toneRemarks,
+    src?.tone_clarity_remarks,
+    src?.toneClarityRemarks,
+    src?.remarks?.tone,
+    src?.remarks?.tone_clarity,
+    src?.remarks?.toneClarity
+  );
+
+  const satisfaction_remarks = firstNonEmpty(
+    src?.satisfaction_remarks,
+    src?.client_satisfaction_remarks,
+    src?.clientSatisfactionRemarks,
+    src?.remarks?.satisfaction,
+    src?.remarks?.client_satisfaction,
+    src?.remarks?.clientSatisfaction
+  );
+
+  const portfolio_remarks = firstNonEmpty(
+    src?.portfolio_remarks,
+    src?.portfolio_revenue_remarks,
+    src?.portfolioRevenueRemarks,
+    src?.remarks?.portfolio,
+    src?.remarks?.portfolio_revenue,
+    src?.remarks?.portfolioRevenue
+  );
+
+  return { tone_remarks, satisfaction_remarks, portfolio_remarks };
+};
+
+// Ensure empty strings end up as null in DB
+const orNull = (v: unknown) => (nonEmpty(v) ? (v as string).trim() : null);
+
 export default function Evaluations() {
   const { toast } = useToast();
   const {
@@ -50,7 +102,7 @@ export default function Evaluations() {
     alerts,
     loading,
     error,
-    canManage,         // <— from hook
+    canManage, // from hook
     addEvaluation,
     updateEvaluation,
     deleteEvaluation,
@@ -61,110 +113,76 @@ export default function Evaluations() {
   const [selectedEvaluation, setSelectedEvaluation] = useState<AgentEvaluation | null>(null);
 
   const handleAddEvaluation = async (data: any) => {
-  try {
-    // normalize remark keys in case the form uses different names
-    const toneRemarks =
-      data.tone_remarks ??
-      data.toneClarityRemarks ??
-      data.tone_clarity_remarks ??
-      null;
+    try {
+      const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
 
-    const satisfactionRemarks =
-      data.satisfaction_remarks ??
-      data.clientSatisfactionRemarks ??
-      data.client_satisfaction_remarks ??
-      null;
+      await addEvaluation({
+        agent_id: data.agent_id,
+        week_start_date: toYMD(data.week_start_date)!,
+        compliance_score: Number(data.compliance_score),
+        tone_clarity_score: Number(data.tone_clarity_score),
+        relevance_score: Number(data.relevance_score),
+        client_satisfaction_score: Number(data.client_satisfaction_score),
+        portfolio_revenue_score: Number(data.portfolio_revenue_score),
 
-    const portfolioRemarks =
-      data.portfolio_remarks ??
-      data.portfolioRevenueRemarks ??
-      data.portfolio_revenue_remarks ??
-      null;
+        compliance_remarks: orNull(data.compliance_remarks),
+        tone_remarks: orNull(data.tone_remarks) ?? tone_remarks,
+        relevance_remarks: orNull(data.relevance_remarks),
+        satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
+        portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
+        overall_remarks: orNull(data.overall_remarks),
+      });
 
-    await addEvaluation({
-      agent_id: data.agent_id,
-      week_start_date: data.week_start_date.toISOString().split("T")[0],
-      compliance_score: data.compliance_score,
-      tone_clarity_score: data.tone_clarity_score,
-      relevance_score: data.relevance_score,
-      client_satisfaction_score: data.client_satisfaction_score,
-      portfolio_revenue_score: data.portfolio_revenue_score,
-      compliance_remarks: data.compliance_remarks ?? null,
-      tone_remarks: toneRemarks,
-      relevance_remarks: data.relevance_remarks ?? null,
-      satisfaction_remarks: satisfactionRemarks,
-      portfolio_remarks: portfolioRemarks,
-      overall_remarks: data.overall_remarks ?? null,
-    });
+      toast({ title: "Evaluation Added", description: "Agent evaluation has been recorded successfully." });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Failed to add evaluation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
-    toast({
-      title: "Evaluation Added",
-      description: "Agent evaluation has been recorded successfully.",
-    });
-  } catch {
-    toast({
-      title: "Error",
-      description: "Failed to add evaluation. Please try again.",
-      variant: "destructive",
-    });
-  }
-};
+  const handleUpdateEvaluation = async (data: any) => {
+    if (!selectedEvaluation) return;
+    try {
+      const { tone_remarks, satisfaction_remarks, portfolio_remarks } = extractRemarks(data);
 
-const handleUpdateEvaluation = async (data: any) => {
-  if (!selectedEvaluation) return;
-  try {
-    const toneRemarks =
-      data.tone_remarks ??
-      data.toneClarityRemarks ??
-      data.tone_clarity_remarks ??
-      null;
+      await updateEvaluation(selectedEvaluation.id, {
+        compliance_score: data.compliance_score != null ? Number(data.compliance_score) : undefined,
+        tone_clarity_score: data.tone_clarity_score != null ? Number(data.tone_clarity_score) : undefined,
+        relevance_score: data.relevance_score != null ? Number(data.relevance_score) : undefined,
+        client_satisfaction_score: data.client_satisfaction_score != null ? Number(data.client_satisfaction_score) : undefined,
+        portfolio_revenue_score: data.portfolio_revenue_score != null ? Number(data.portfolio_revenue_score) : undefined,
 
-    const satisfactionRemarks =
-      data.satisfaction_remarks ??
-      data.clientSatisfactionRemarks ??
-      data.client_satisfaction_remarks ??
-      null;
+        compliance_remarks: orNull(data.compliance_remarks),
+        tone_remarks: orNull(data.tone_remarks) ?? tone_remarks,
+        relevance_remarks: orNull(data.relevance_remarks),
+        satisfaction_remarks: orNull(data.satisfaction_remarks) ?? satisfaction_remarks,
+        portfolio_remarks: orNull(data.portfolio_remarks) ?? portfolio_remarks,
+        overall_remarks: orNull(data.overall_remarks),
+      });
 
-    const portfolioRemarks =
-      data.portfolio_remarks ??
-      data.portfolioRevenueRemarks ??
-      data.portfolio_revenue_remarks ??
-      null;
-
-    await updateEvaluation(selectedEvaluation.id, {
-      compliance_score: data.compliance_score,
-      tone_clarity_score: data.tone_clarity_score,
-      relevance_score: data.relevance_score,
-      client_satisfaction_score: data.client_satisfaction_score,
-      portfolio_revenue_score: data.portfolio_revenue_score,
-      compliance_remarks: data.compliance_remarks ?? null,
-      tone_remarks: toneRemarks,
-      relevance_remarks: data.relevance_remarks ?? null,
-      satisfaction_remarks: satisfactionRemarks,
-      portfolio_remarks: portfolioRemarks,
-      overall_remarks: data.overall_remarks ?? null,
-    });
-
-    toast({
-      title: "Evaluation Updated",
-      description: "Agent evaluation has been updated successfully.",
-    });
-  } catch {
-    toast({
-      title: "Error",
-      description: "Failed to update evaluation. Please try again.",
-      variant: "destructive",
-    });
-  }
-};
-
+      toast({ title: "Evaluation Updated", description: "Agent evaluation has been updated successfully." });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Failed to update evaluation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDeleteEvaluation = async (evaluation: AgentEvaluation) => {
     try {
       await deleteEvaluation(evaluation.id);
       toast({ title: "Evaluation Deleted", description: "Agent evaluation has been deleted successfully." });
-    } catch {
-      toast({ title: "Error", description: "Failed to delete evaluation. Please try again.", variant: "destructive" });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Failed to delete evaluation. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 

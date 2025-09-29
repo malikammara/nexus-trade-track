@@ -10,7 +10,7 @@ import {
   Search, 
   TrendingUp,
   Calculator,
-  Brain,
+  ClipboardList,
   Menu,
   X
 } from "lucide-react";
@@ -28,6 +28,7 @@ const navigation = [
   { name: "Products", href: "/products", icon: Search },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Trade Suggestions", href: "/trade-suggestions", icon: Calculator },
+  { name: "Evaluations", href: "/evaluations", icon: ClipboardList },
 ];
 
 export function Layout({ children }: LayoutProps) {

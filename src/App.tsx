@@ -14,6 +14,7 @@ import Agents from "./pages/Agents";
 import Analytics from "./pages/Analytics";
 import TradeSuggestions from "./pages/TradeSuggestions";
 import AdvancedTradeSuggestions from "./pages/AdvancedTradeSuggestions";
+import Evaluations from "./pages/Evaluations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/trade-suggestions" element={<TradeSuggestions />} />
                   <Route path="/advanced-trade-suggestions" element={<AdvancedTradeSuggestions />} />
+                  <Route path="/evaluations" element={<Evaluations />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Layout>

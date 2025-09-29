@@ -85,6 +85,41 @@ export interface TeamSettings {
   updated_at: string;
 }
 
+export interface AgentEvaluation {
+  id: string;
+  agent_id: string;
+  week_start_date: string;
+  compliance_score: number;
+  tone_clarity_score: number;
+  relevance_score: number;
+  client_satisfaction_score: number;
+  portfolio_revenue_score: number;
+  total_score: number;
+  compliance_remarks?: string;
+  tone_remarks?: string;
+  relevance_remarks?: string;
+  satisfaction_remarks?: string;
+  portfolio_remarks?: string;
+  overall_remarks?: string;
+  evaluated_by: string;
+  created_at: string;
+  updated_at: string;
+  agent_name?: string;
+  agent_email?: string;
+  performance_level?: string;
+  alert_message?: string;
+}
+
+export interface EvaluationAlert {
+  agent_id: string;
+  agent_name: string;
+  agent_email: string;
+  total_score: number;
+  week_start_date: string;
+  alert_message: string;
+  alert_level: 'critical' | 'warning' | 'good' | 'excellent' | 'none';
+}
+
 export interface DashboardStats {
   total_clients: number;
   total_margin_in: number;

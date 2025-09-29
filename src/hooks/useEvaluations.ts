@@ -10,7 +10,7 @@ export function useEvaluations() {
   const [error, setError] = useState<string | null>(null)
   const { user, isAdmin } = useAuth()
 
-  const isManager = user?.email === 'syedyousufhussainzaidi@gmail.com'
+  const isManager = user?.email === 'syedyousufhussainzaidi@gmail.com' || user?.email === 'doctorcrack007@gmail.com'
 
   const fetchEvaluations = async (agentId?: string) => {
     try {

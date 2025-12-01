@@ -94,17 +94,34 @@ export function useEvaluations() {
   const addEvaluation = async (evaluationData: {
     agent_id: string
     week_start_date: string
+
+    // Core 5 scores
     compliance_score: number
     tone_clarity_score: number
     relevance_score: number
     client_satisfaction_score: number
     portfolio_revenue_score: number
+
+    // 🔹 NEW 4 scores
+    trading_tasks_score: number
+    discipline_compliance_score: number
+    attitude_conduct_score: number
+    client_metrics_score: number
+
+    // core remarks
     compliance_remarks?: string
     tone_remarks?: string
     relevance_remarks?: string
     satisfaction_remarks?: string
     portfolio_remarks?: string
     overall_remarks?: string
+
+    // 🔹 NEW remarks
+    trading_tasks_remarks?: string
+    discipline_compliance_remarks?: string
+    attitude_conduct_remarks?: string
+    client_metrics_remarks?: string
+
     [key: string]: any
   }) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
@@ -114,19 +131,33 @@ export function useEvaluations() {
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
         p_week_start_date: evaluationData.week_start_date,
+
+        // Core scores
         p_compliance_score: evaluationData.compliance_score,
         p_tone_clarity_score: evaluationData.tone_clarity_score,
         p_relevance_score: evaluationData.relevance_score,
         p_client_satisfaction_score: evaluationData.client_satisfaction_score,
         p_portfolio_revenue_score: evaluationData.portfolio_revenue_score,
 
-        // ensure undefined/"" -> null, prefer direct field if non-empty, else alias
-        p_compliance_remarks: firstNonEmpty(evaluationData.compliance_remarks) ,
+        // 🔹 NEW scores (trading / discipline / attitude / client metrics)
+        p_trading_tasks_score: evaluationData.trading_tasks_score,
+        p_discipline_compliance_score: evaluationData.discipline_compliance_score,
+        p_attitude_conduct_score: evaluationData.attitude_conduct_score,
+        p_client_metrics_score: evaluationData.client_metrics_score,
+
+        // remarks – ensure undefined/"" -> null, prefer direct field if non-empty, else alias
+        p_compliance_remarks: firstNonEmpty(evaluationData.compliance_remarks),
         p_tone_remarks: firstNonEmpty(evaluationData.tone_remarks, aliases.tone_remarks),
         p_relevance_remarks: firstNonEmpty(evaluationData.relevance_remarks),
         p_satisfaction_remarks: firstNonEmpty(evaluationData.satisfaction_remarks, aliases.satisfaction_remarks),
         p_portfolio_remarks: firstNonEmpty(evaluationData.portfolio_remarks, aliases.portfolio_remarks),
         p_overall_remarks: firstNonEmpty(evaluationData.overall_remarks),
+
+        // 🔹 NEW remarks
+        p_trading_tasks_remarks: firstNonEmpty(evaluationData.trading_tasks_remarks),
+        p_discipline_compliance_remarks: firstNonEmpty(evaluationData.discipline_compliance_remarks),
+        p_attitude_conduct_remarks: firstNonEmpty(evaluationData.attitude_conduct_remarks),
+        p_client_metrics_remarks: firstNonEmpty(evaluationData.client_metrics_remarks),
       })
 
       if (error) throw error
@@ -148,18 +179,33 @@ export function useEvaluations() {
 
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
+
+        // core scores
         p_compliance_score: updates.compliance_score ?? null,
         p_tone_clarity_score: updates.tone_clarity_score ?? null,
         p_relevance_score: updates.relevance_score ?? null,
         p_client_satisfaction_score: updates.client_satisfaction_score ?? null,
         p_portfolio_revenue_score: updates.portfolio_revenue_score ?? null,
 
+        // 🔹 NEW scores (nullable on update)
+        p_trading_tasks_score: (updates as any).trading_tasks_score ?? null,
+        p_discipline_compliance_score: (updates as any).discipline_compliance_score ?? null,
+        p_attitude_conduct_score: (updates as any).attitude_conduct_score ?? null,
+        p_client_metrics_score: (updates as any).client_metrics_score ?? null,
+
+        // core remarks
         p_compliance_remarks: firstNonEmpty((updates as any).compliance_remarks),
         p_tone_remarks: firstNonEmpty((updates as any).tone_remarks, aliases.tone_remarks),
         p_relevance_remarks: firstNonEmpty((updates as any).relevance_remarks),
         p_satisfaction_remarks: firstNonEmpty((updates as any).satisfaction_remarks, aliases.satisfaction_remarks),
         p_portfolio_remarks: firstNonEmpty((updates as any).portfolio_remarks, aliases.portfolio_remarks),
         p_overall_remarks: firstNonEmpty((updates as any).overall_remarks),
+
+        // 🔹 NEW remarks
+        p_trading_tasks_remarks: firstNonEmpty((updates as any).trading_tasks_remarks),
+        p_discipline_compliance_remarks: firstNonEmpty((updates as any).discipline_compliance_remarks),
+        p_attitude_conduct_remarks: firstNonEmpty((updates as any).attitude_conduct_remarks),
+        p_client_metrics_remarks: firstNonEmpty((updates as any).client_metrics_remarks),
       })
 
       if (error) throw error

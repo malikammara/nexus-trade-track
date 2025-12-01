@@ -35,6 +35,7 @@ import { Calendar as CalendarIcon, Plus, CreditCard as Edit, ClipboardList } fro
 import { format, startOfWeek } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Agent, AgentEvaluation } from '@/types'
+import { evaluationPoints } from '@/constants/evaluationPoints'
 
 /** 
  * IMPORTANT: include the three form field names that your UI actually uses:
@@ -46,11 +47,19 @@ import { Agent, AgentEvaluation } from '@/types'
 const evaluationSchema = z.object({
   agent_id: z.string().min(1, 'Agent is required'),
   week_start_date: z.date(),
+
+  // Core 5 criteria
   compliance_score: z.number().min(1).max(5),
   tone_clarity_score: z.number().min(1).max(5),
   relevance_score: z.number().min(1).max(5),
   client_satisfaction_score: z.number().min(1).max(5),
   portfolio_revenue_score: z.number().min(1).max(5),
+
+  // 🔹 NEW: Trading / Discipline / Attitude / Client Metrics
+  trading_tasks_score: z.number().min(1).max(5),
+  discipline_compliance_score: z.number().min(1).max(5),
+  attitude_conduct_score: z.number().min(1).max(5),
+  client_metrics_score: z.number().min(1).max(5),
 
   // Remarks (UI field names)
   compliance_remarks: z.string().optional(),
@@ -58,6 +67,13 @@ const evaluationSchema = z.object({
   relevance_remarks: z.string().optional(),
   client_satisfaction_remarks: z.string().optional(),
   portfolio_revenue_remarks: z.string().optional(),
+
+  // 🔹 NEW remarks
+  trading_tasks_remarks: z.string().optional(),
+  discipline_compliance_remarks: z.string().optional(),
+  attitude_conduct_remarks: z.string().optional(),
+  client_metrics_remarks: z.string().optional(),
+
   overall_remarks: z.string().optional(),
 
   // (Optional) canonical keys in case something passes them directly
@@ -106,7 +122,6 @@ const criteria = [
 
 // helpers
 const isNonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0
-const toYMD = (d: Date | string) => (typeof d === 'string' ? (d.includes('T') ? d.split('T')[0] : d) : new Date(d).toISOString().split('T')[0])
 
 export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false }: EvaluationFormProps) {
   const [open, setOpen] = useState(false)
@@ -118,17 +133,33 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
     defaultValues: evaluation ? {
       agent_id: evaluation.agent_id,
       week_start_date: new Date(evaluation.week_start_date),
+
+      // Core 5
       compliance_score: evaluation.compliance_score,
       tone_clarity_score: evaluation.tone_clarity_score,
       relevance_score: evaluation.relevance_score,
       client_satisfaction_score: evaluation.client_satisfaction_score,
       portfolio_revenue_score: evaluation.portfolio_revenue_score,
 
+      // 🔹 NEW scores – fall back to 3 if missing
+      trading_tasks_score: (evaluation as any).trading_tasks_score ?? 3,
+      discipline_compliance_score: (evaluation as any).discipline_compliance_score ?? 3,
+      attitude_conduct_score: (evaluation as any).attitude_conduct_score ?? 3,
+      client_metrics_score: (evaluation as any).client_metrics_score ?? 3,
+
+      // Remarks – existing
       compliance_remarks: evaluation.compliance_remarks ?? '',
       tone_clarity_remarks: evaluation.tone_remarks ?? '',              // map from canonical → UI
       relevance_remarks: evaluation.relevance_remarks ?? '',
       client_satisfaction_remarks: evaluation.satisfaction_remarks ?? '',// map from canonical → UI
       portfolio_revenue_remarks: evaluation.portfolio_remarks ?? '',     // map from canonical → UI
+
+      // 🔹 NEW remarks
+      trading_tasks_remarks: (evaluation as any).trading_tasks_remarks ?? '',
+      discipline_compliance_remarks: (evaluation as any).discipline_compliance_remarks ?? '',
+      attitude_conduct_remarks: (evaluation as any).attitude_conduct_remarks ?? '',
+      client_metrics_remarks: (evaluation as any).client_metrics_remarks ?? '',
+
       overall_remarks: evaluation.overall_remarks ?? '',
 
       // also allow canonical keys if parent supplies
@@ -138,17 +169,33 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
     } : {
       agent_id: '',
       week_start_date: startOfWeek(new Date(), { weekStartsOn: 1 }),
+
+      // Core 5
       compliance_score: 3,
       tone_clarity_score: 3,
       relevance_score: 3,
       client_satisfaction_score: 3,
       portfolio_revenue_score: 3,
 
+      // 🔹 NEW scores defaults
+      trading_tasks_score: 3,
+      discipline_compliance_score: 3,
+      attitude_conduct_score: 3,
+      client_metrics_score: 3,
+
+      // Remarks
       compliance_remarks: '',
       tone_clarity_remarks: '',
       relevance_remarks: '',
       client_satisfaction_remarks: '',
       portfolio_revenue_remarks: '',
+
+      // 🔹 NEW remarks defaults
+      trading_tasks_remarks: '',
+      discipline_compliance_remarks: '',
+      attitude_conduct_remarks: '',
+      client_metrics_remarks: '',
+
       overall_remarks: '',
 
       tone_remarks: '',
@@ -159,18 +206,31 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
 
   const watchedScores = form.watch([
     'compliance_score',
-    'tone_clarity_score', 
+    'tone_clarity_score',
     'relevance_score',
     'client_satisfaction_score',
-    'portfolio_revenue_score'
+    'portfolio_revenue_score',
+    // 🔹 include the new 4 in total
+    'trading_tasks_score',
+    'discipline_compliance_score',
+    'attitude_conduct_score',
+    'client_metrics_score',
   ])
 
   const totalScore = watchedScores.reduce((sum, score) => sum + (score || 0), 0)
 
+  // Now max = 45 (9 * 5). Thresholds proportionally scaled from old /25:
+  // <=60% → Immediate Coaching, <=~76% → Needs Improvement, <=~92% → Strong Performance, else Excellent.
   const getPerformanceLevel = (score: number) => {
-    if (score <= 15) return { level: 'Immediate Coaching', color: 'text-destructive', bg: 'bg-destructive/10' }
-    if (score <= 19) return { level: 'Needs Improvement', color: 'text-warning', bg: 'bg-warning/10' }
-    if (score <= 23) return { level: 'Strong Performance', color: 'text-success', bg: 'bg-success/10' }
+    if (score <= 27) {
+      return { level: 'Immediate Coaching', color: 'text-destructive', bg: 'bg-destructive/10' }
+    }
+    if (score <= 34) {
+      return { level: 'Needs Improvement', color: 'text-warning', bg: 'bg-warning/10' }
+    }
+    if (score <= 41) {
+      return { level: 'Strong Performance', color: 'text-success', bg: 'bg-success/10' }
+    }
     return { level: 'Excellent', color: 'text-trading-profit', bg: 'bg-trading-profit/10' }
   }
 
@@ -183,13 +243,24 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
       const mapped = {
         ...data,
         week_start_date: data.week_start_date, // keep Date; page converts to YYYY-MM-DD
-        tone_remarks: isNonEmpty(data.tone_remarks) ? data.tone_remarks : (isNonEmpty(data.tone_clarity_remarks) ? data.tone_clarity_remarks.trim() : ''),
-        satisfaction_remarks: isNonEmpty(data.satisfaction_remarks) ? data.satisfaction_remarks : (isNonEmpty(data.client_satisfaction_remarks) ? data.client_satisfaction_remarks.trim() : ''),
-        portfolio_remarks: isNonEmpty(data.portfolio_remarks) ? data.portfolio_remarks : (isNonEmpty(data.portfolio_revenue_remarks) ? data.portfolio_revenue_remarks.trim() : ''),
+        tone_remarks: isNonEmpty(data.tone_remarks)
+          ? data.tone_remarks
+          : (isNonEmpty(data.tone_clarity_remarks) ? data.tone_clarity_remarks.trim() : ''),
+        satisfaction_remarks: isNonEmpty(data.satisfaction_remarks)
+          ? data.satisfaction_remarks
+          : (isNonEmpty(data.client_satisfaction_remarks) ? data.client_satisfaction_remarks.trim() : ''),
+        portfolio_remarks: isNonEmpty(data.portfolio_remarks)
+          ? data.portfolio_remarks
+          : (isNonEmpty(data.portfolio_revenue_remarks) ? data.portfolio_revenue_remarks.trim() : ''),
       }
 
       // Optional: log exactly what leaves the form
       console.log('EvaluationForm → submit payload', {
+        totalScore,
+        trading_tasks_score: mapped.trading_tasks_score,
+        discipline_compliance_score: mapped.discipline_compliance_score,
+        attitude_conduct_score: mapped.attitude_conduct_score,
+        client_metrics_score: mapped.client_metrics_score,
         tone_remarks: mapped.tone_remarks,
         satisfaction_remarks: mapped.satisfaction_remarks,
         portfolio_remarks: mapped.portfolio_remarks,
@@ -229,7 +300,26 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
             {isEditing ? 'Edit Agent Evaluation' : 'Add Agent Evaluation'}
           </DialogTitle>
         </DialogHeader>
-        
+
+        <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm font-medium text-foreground">Evaluation points</p>
+            <p className="text-xs text-muted-foreground">Use these as reference while scoring and adding remarks.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {evaluationPoints.map((section) => (
+              <div key={section.title} className="space-y-2">
+                <p className="text-sm font-semibold text-foreground">{section.title}</p>
+                <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
+                  {section.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             {/* Agent and Date Selection */}
@@ -308,22 +398,22 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
             </div>
 
             {/* Score Summary */}
-            <div className={cn("p-4 rounded-lg border-2", getPerformanceLevel(totalScore).bg)}>
+            <div className={cn("p-4 rounded-lg border-2", performance.bg)}>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">Current Total Score</h3>
-                  <p className={cn("text-sm", getPerformanceLevel(totalScore).color)}>
-                    {getPerformanceLevel(totalScore).level}
+                  <p className={cn("text-sm", performance.color)}>
+                    {performance.level}
                   </p>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold">{totalScore}</div>
-                  <div className="text-sm text-muted-foreground">out of 25</div>
+                  <div className="text-sm text-muted-foreground">out of 45</div>
                 </div>
               </div>
             </div>
 
-            {/* Evaluation Criteria */}
+            {/* Evaluation Criteria – existing 5 */}
             <div className="space-y-6">
               {criteria.map((criterion) => (
                 <div key={criterion.key} className="space-y-3 p-4 border rounded-lg">
@@ -378,6 +468,222 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* 🔹 A. Trading Tasks */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div>
+                <h4 className="font-medium">A. Trading Tasks</h4>
+                <p className="text-sm text-muted-foreground">
+                  Daily trade calls, stop-loss accuracy (9/10), exposure at ~50% of equity, NOTs achievement.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="trading_tasks_score"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Score (1-5)</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          value={field.value?.toString()}
+                          className="flex gap-4"
+                        >
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <div key={score} className="flex items-center space-x-2">
+                              <RadioGroupItem value={score.toString()} id={`trading_tasks_${score}`} />
+                              <Label htmlFor={`trading_tasks_${score}`}>{score}</Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="trading_tasks_remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Comment on trade calls, SL placement, exposure, NOTs..."
+                          className="resize-none"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* 🔹 B. Discipline & Compliance */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div>
+                <h4 className="font-medium">B. Discipline &amp; Compliance</h4>
+                <p className="text-sm text-muted-foreground">
+                  Accurate execution, correct order placement &amp; reporting, PMEX / SOP adherence, timely task completion, clean logs.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="discipline_compliance_score"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Score (1-5)</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          value={field.value?.toString()}
+                          className="flex gap-4"
+                        >
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <div key={score} className="flex items-center space-x-2">
+                              <RadioGroupItem value={score.toString()} id={`discipline_compliance_${score}`} />
+                              <Label htmlFor={`discipline_compliance_${score}`}>{score}</Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="discipline_compliance_remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Execution accuracy, PMEX rules, logs & documentation..."
+                          className="resize-none"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* 🔹 C. Attitude & Professional Conduct */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div>
+                <h4 className="font-medium">C. Attitude &amp; Professional Conduct</h4>
+                <p className="text-sm text-muted-foreground">
+                  Patience, professionalism, call quality, daily market updates, handling client pressure.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="attitude_conduct_score"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Score (1-5)</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          value={field.value?.toString()}
+                          className="flex gap-4"
+                        >
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <div key={score} className="flex items-center space-x-2">
+                              <RadioGroupItem value={score.toString()} id={`attitude_conduct_${score}`} />
+                              <Label htmlFor={`attitude_conduct_${score}`}>{score}</Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="attitude_conduct_remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Comment on patience, tone under pressure, professionalism..."
+                          className="resize-none"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* 🔹 D. Client Metrics */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div>
+                <h4 className="font-medium">D. Client Metrics</h4>
+                <p className="text-sm text-muted-foreground">
+                  Client retention vs 60% target, Margin In vs 30% target, overall client health.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="client_metrics_score"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Score (1-5)</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          value={field.value?.toString()}
+                          className="flex gap-4"
+                        >
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <div key={score} className="flex items-center space-x-2">
+                              <RadioGroupItem value={score.toString()} id={`client_metrics_${score}`} />
+                              <Label htmlFor={`client_metrics_${score}`}>{score}</Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="client_metrics_remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Retention % vs target, Margin In quality, key client outcomes..."
+                          className="resize-none"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             {/* Overall Remarks */}

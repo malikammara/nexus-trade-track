@@ -9,15 +9,19 @@ const ADMIN_EMAIL_ALLOWLIST = new Set([
   'teamfalcons73@gmail.com'
 ])
 
-export type AddEvaluationPayload = {
+export type StpAddEvaluationPayload = {
   agent_id: string
-  week_start_date: string
+  week_start_date: string            // YYYY-MM-DD
   criteria_scores: Record<string, number>
   criteria_remarks: Record<string, string | null>
   overall_remarks?: string | null
 }
 
-export type UpdateEvaluationPayload = Partial<AddEvaluationPayload>
+export type StpUpdateEvaluationPayload = {
+  criteria_scores?: Record<string, number>
+  criteria_remarks?: Record<string, string | null>
+  overall_remarks?: string | null
+}
 
 export function useEvaluations() {
   const [evaluations, setEvaluations] = useState<AgentEvaluation[]>([])
@@ -32,14 +36,18 @@ export function useEvaluations() {
   const fetchEvaluations = async (agentId?: string) => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.rpc('get_agent_evaluations', {
+      const { data, error } = await supabase.rpc('stp_get_agent_evaluations', {
         p_agent_id: agentId ?? null,
         p_limit: 50,
       })
       if (error) throw error
       setEvaluations(data ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching evaluations')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'An error occurred while fetching evaluations'
+      )
     } finally {
       setLoading(false)
     }
@@ -48,21 +56,25 @@ export function useEvaluations() {
   const fetchAlerts = async () => {
     try {
       const { data, error } = await supabase
-        .from('evaluation_alerts')
+        .from('stp_evaluation_alerts')
         .select('*')
         .order('total_score', { ascending: true })
 
       if (error) throw error
       setAlerts(data ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch alerts')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to fetch evaluation alerts'
+      )
     }
   }
 
-  const addEvaluation = async (evaluationData: AddEvaluationPayload) => {
+  const addEvaluation = async (evaluationData: StpAddEvaluationPayload) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
     try {
-      const { data, error } = await supabase.rpc('add_agent_evaluation', {
+      const { data, error } = await supabase.rpc('stp_create_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
         p_week_start_date: evaluationData.week_start_date,
         p_criteria_scores: evaluationData.criteria_scores,
@@ -81,11 +93,11 @@ export function useEvaluations() {
 
   const updateEvaluation = async (
     evaluationId: string,
-    updates: UpdateEvaluationPayload & { [key: string]: any }
+    updates: StpUpdateEvaluationPayload
   ) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can update evaluations')
     try {
-      const { data, error } = await supabase.rpc('update_agent_evaluation', {
+      const { data, error } = await supabase.rpc('stp_update_agent_evaluation', {
         p_evaluation_id: evaluationId,
         p_criteria_scores: updates.criteria_scores ?? null,
         p_criteria_remarks: updates.criteria_remarks ?? null,
@@ -104,13 +116,12 @@ export function useEvaluations() {
   const deleteEvaluation = async (evaluationId: string) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can delete evaluations')
     try {
-      const { error } = await supabase
-        .from('agent_evaluations')
-        .delete()
-        .eq('id', evaluationId)
+      const { error } = await supabase.rpc('stp_delete_agent_evaluation', {
+        p_evaluation_id: evaluationId,
+      })
 
       if (error) throw error
-      setEvaluations((prev) => prev.filter((e) => e.id !== evaluationId))
+      setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
       await fetchAlerts()
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to delete evaluation')
@@ -119,7 +130,7 @@ export function useEvaluations() {
 
   const getAgentEvaluations = async (agentId: string) => {
     try {
-      const { data, error } = await supabase.rpc('get_agent_evaluations', {
+      const { data, error } = await supabase.rpc('stp_get_agent_evaluations', {
         p_agent_id: agentId,
         p_limit: 20,
       })

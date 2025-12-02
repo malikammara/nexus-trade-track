@@ -39,12 +39,25 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-// date → "YYYY-MM-DD"
+// date → "YYYY-MM-DD" without timezone shifting
 const toYMD = (d: Date | string) => {
   if (!d) return null;
-  if (typeof d === "string") return d.includes("T") ? d.split("T")[0] : d;
-  return new Date(d).toISOString().split("T")[0];
+
+  if (typeof d === "string") {
+    // If backend ever sends "2025-03-04T00:00:00Z", trim the time part
+    return d.includes("T") ? d.split("T")[0] : d;
+  }
+
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 0-based
+  const day = d.getDate();
+
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+
+  return `${year}-${mm}-${dd}`;
 };
+
 
 export default function Evaluations() {
   const { toast } = useToast();

@@ -76,7 +76,7 @@ export function useEvaluations() {
     try {
       const { data, error } = await supabase.rpc('stp_create_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
-        p_evaluation_date: evaluationData.week_start_date,
+        p_week_start_date: evaluationData.week_start_date,
         p_criteria_scores: evaluationData.criteria_scores,
         p_criteria_remarks: evaluationData.criteria_remarks,
         p_overall_remarks: evaluationData.overall_remarks ?? null,

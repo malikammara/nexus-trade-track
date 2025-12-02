@@ -94,7 +94,7 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
     : (() => {
         const base: any = {
           agent_id: '',
-          week_start_date: startOfWeek(new Date(), { weekStartsOn: 1 }),
+          week_start_date: new Date(),
           overall_remarks: '',
         }
 
@@ -257,43 +257,53 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="week_start_date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Week Starting</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn('w-full pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
-                          >
-                            {field.value ? format(field.value, 'PPP') : <span>Pick week start date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            if (date) {
-                              const monday = startOfWeek(date, { weekStartsOn: 1 })
-                              field.onChange(monday)
-                            }
-                          }}
-                          disabled={(date) => date > new Date() || date < new Date('2024-01-01')}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+<FormField
+  control={form.control}
+  name="week_start_date" // field name stays the same for Supabase
+  render={({ field }) => (
+    <FormItem className="flex flex-col">
+      <FormLabel>Evaluation Date</FormLabel>
+      <Popover>
+        <PopoverTrigger asChild>
+          <FormControl>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full pl-3 text-left font-normal",
+                !field.value && "text-muted-foreground"
+              )}
+            >
+              {field.value ? (
+                format(field.value, "PPP")
+              ) : (
+                <span>Select evaluation date</span>
+              )}
+              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+            </Button>
+          </FormControl>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={field.value}
+            onSelect={(date) => {
+              if (date) {
+                // DAILY: use the date as-is, no startOfWeek
+                field.onChange(date)
+              }
+            }}
+            disabled={(date) =>
+              date > new Date() || date < new Date("2024-01-01")
+            }
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+
             </div>
 
             {/* Score Summary */}

@@ -39,110 +39,44 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-/** ---------- STRICT REMARK MAPPERS (page-level) ---------- **/
-const isNonEmpty = (v: any): v is string => typeof v === "string" && v.trim().length > 0;
-const orNull = (v: any) => (isNonEmpty(v) ? v.trim() : null);
-const firstNonEmpty = (...vals: any[]) => vals.find(isNonEmpty) ?? null;
-
-// Pull values from *any* of these keys (flat or nested) and normalize to the 3 canonical fields.
-function extractToneRemarks(d: any) {
-  return firstNonEmpty(
-    d?.tone_remarks,
-    d?.toneRemarks,
-    d?.tone_clarity_remarks,
-    d?.toneClarityRemarks,
-    d?.toneClarityNotes,
-    d?.tone_notes,
-    d?.toneNotes,
-    d?.toneAndClarityRemarks,
-    d?.tone_and_clarity_remarks,
-    d?.remarks?.tone,
-    d?.remarks?.tone_clarity,
-    d?.remarks?.toneClarity
-  );
-}
-function extractSatisfactionRemarks(d: any) {
-  return firstNonEmpty(
-    d?.satisfaction_remarks,
-    d?.client_satisfaction_remarks,
-    d?.clientSatisfactionRemarks,
-    d?.clientSatisfactionNotes,
-    d?.csatRemarks,
-    d?.clientRemarks,
-    d?.remarks?.satisfaction,
-    d?.remarks?.client_satisfaction,
-    d?.remarks?.clientSatisfaction
-  );
-}
-function extractPortfolioRemarks(d: any) {
-  return firstNonEmpty(
-    d?.portfolio_remarks,
-    d?.portfolio_revenue_remarks,
-    d?.portfolioRevenueRemarks,
-    d?.portfolioNotes,
-    d?.portfolioAndRevenueRemarks,
-    d?.portfolio_revenue_notes,
-    d?.remarks?.portfolio,
-    d?.remarks?.portfolio_revenue,
-    d?.remarks?.portfolioRevenue
-  );
-}
-
 // date → "YYYY-MM-DD"
 const toYMD = (d: Date | string) => {
   if (!d) return null;
   if (typeof d === "string") return d.includes("T") ? d.split("T")[0] : d;
   return new Date(d).toISOString().split("T")[0];
 };
-/** -------------------------------------------------------- **/
 
 export default function Evaluations() {
   const { toast } = useToast();
-  const { evaluations, alerts, loading, error, canManage, addEvaluation, updateEvaluation, deleteEvaluation } = useEvaluations();
+  const {
+    evaluations,
+    alerts,
+    loading,
+    error,
+    canManage,
+    addEvaluation,
+    updateEvaluation,
+    deleteEvaluation,
+  } = useEvaluations();
   const { agents } = useAgents();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvaluation, setSelectedEvaluation] = useState<AgentEvaluation | null>(null);
 
-  // ADD with strict remark mapping
+  const maxScore = evaluationPoints.length * 5;
+
+  // ADD: expects mapped payload from EvaluationForm (criteria_scores + criteria_remarks)
   const handleAddEvaluation = async (data: any) => {
     try {
-      const tone = orNull(extractToneRemarks(data)) ?? orNull(data?.tone_remarks);
-      const sat = orNull(extractSatisfactionRemarks(data)) ?? orNull(data?.satisfaction_remarks);
-      const port = orNull(extractPortfolioRemarks(data)) ?? orNull(data?.portfolio_remarks);
-
       const payload = {
         agent_id: data.agent_id,
         week_start_date: toYMD(data.week_start_date)!,
-
-        // core scores (5)
-        compliance_score: Number(data.compliance_score),
-        tone_clarity_score: Number(data.tone_clarity_score),
-        relevance_score: Number(data.relevance_score),
-        client_satisfaction_score: Number(data.client_satisfaction_score),
-        portfolio_revenue_score: Number(data.portfolio_revenue_score),
-
-        // new scores (4) → total 9 criteria, /45
-        trading_tasks_score: Number(data.trading_tasks_score),
-        discipline_compliance_score: Number(data.discipline_compliance_score),
-        attitude_conduct_score: Number(data.attitude_conduct_score),
-        client_metrics_score: Number(data.client_metrics_score),
-
-        compliance_remarks: orNull(data.compliance_remarks),
-        tone_remarks: tone,
-        relevance_remarks: orNull(data.relevance_remarks),
-        satisfaction_remarks: sat,
-        portfolio_remarks: port,
-        overall_remarks: orNull(data.overall_remarks),
-
-        // new remarks
-        trading_tasks_remarks: orNull(data.trading_tasks_remarks),
-        discipline_compliance_remarks: orNull(data.discipline_compliance_remarks),
-        attitude_conduct_remarks: orNull(data.attitude_conduct_remarks),
-        client_metrics_remarks: orNull(data.client_metrics_remarks),
+        criteria_scores: data.criteria_scores,
+        criteria_remarks: data.criteria_remarks,
+        overall_remarks: data.overall_remarks,
       };
 
-      console.log("ADD payload →", payload); // verify in console
+      console.log("ADD payload →", payload);
       await addEvaluation(payload);
 
       toast({ title: "Evaluation Added", description: "Agent evaluation has been recorded successfully." });
@@ -155,42 +89,16 @@ export default function Evaluations() {
     }
   };
 
-  // EDIT with strict remark mapping (pass id explicitly)
+  // EDIT
   const handleUpdateEvaluation = async (id: string, data: any) => {
     try {
-      const tone = orNull(extractToneRemarks(data)) ?? orNull(data?.tone_remarks);
-      const sat = orNull(extractSatisfactionRemarks(data)) ?? orNull(data?.satisfaction_remarks);
-      const port = orNull(extractPortfolioRemarks(data)) ?? orNull(data?.portfolio_remarks);
-
       const payload = {
-        // core scores
-        compliance_score: data.compliance_score != null ? Number(data.compliance_score) : undefined,
-        tone_clarity_score: data.tone_clarity_score != null ? Number(data.tone_clarity_score) : undefined,
-        relevance_score: data.relevance_score != null ? Number(data.relevance_score) : undefined,
-        client_satisfaction_score: data.client_satisfaction_score != null ? Number(data.client_satisfaction_score) : undefined,
-        portfolio_revenue_score: data.portfolio_revenue_score != null ? Number(data.portfolio_revenue_score) : undefined,
-
-        // new scores
-        trading_tasks_score: data.trading_tasks_score != null ? Number(data.trading_tasks_score) : undefined,
-        discipline_compliance_score: data.discipline_compliance_score != null ? Number(data.discipline_compliance_score) : undefined,
-        attitude_conduct_score: data.attitude_conduct_score != null ? Number(data.attitude_conduct_score) : undefined,
-        client_metrics_score: data.client_metrics_score != null ? Number(data.client_metrics_score) : undefined,
-
-        compliance_remarks: orNull(data.compliance_remarks),
-        tone_remarks: tone,
-        relevance_remarks: orNull(data.relevance_remarks),
-        satisfaction_remarks: sat,
-        portfolio_remarks: port,
-        overall_remarks: orNull(data.overall_remarks),
-
-        // new remarks
-        trading_tasks_remarks: orNull(data.trading_tasks_remarks),
-        discipline_compliance_remarks: orNull(data.discipline_compliance_remarks),
-        attitude_conduct_remarks: orNull(data.attitude_conduct_remarks),
-        client_metrics_remarks: orNull(data.client_metrics_remarks),
+        criteria_scores: data.criteria_scores,
+        criteria_remarks: data.criteria_remarks,
+        overall_remarks: data.overall_remarks,
       };
 
-      console.log("UPDATE payload →", { id, ...payload }); // verify in console
+      console.log("UPDATE payload →", { id, ...payload });
       await updateEvaluation(id, payload);
 
       toast({ title: "Evaluation Updated", description: "Agent evaluation has been updated successfully." });
@@ -223,11 +131,11 @@ export default function Evaluations() {
     );
   }, [evaluations, searchTerm]);
 
-  // thresholds scaled for /45 (same logic as EvaluationForm)
+  // thresholds for /maxScore
   const getAlertBadge = (score: number) => {
-    if (score <= 27) return { variant: "destructive" as const, icon: AlertTriangle, text: "Critical" };
-    if (score <= 34) return { variant: "secondary" as const, icon: AlertTriangle, text: "Warning" };
-    if (score <= 41) return { variant: "default" as const, icon: CheckCircle, text: "Good" };
+    if (score <= maxScore * 0.6) return { variant: "destructive" as const, icon: AlertTriangle, text: "Critical" };
+    if (score <= maxScore * 0.75) return { variant: "secondary" as const, icon: AlertTriangle, text: "Warning" };
+    if (score <= maxScore * 0.9) return { variant: "default" as const, icon: CheckCircle, text: "Good" };
     return { variant: "default" as const, icon: Award, text: "Excellent" };
   };
 
@@ -235,13 +143,37 @@ export default function Evaluations() {
   const warningAlerts = alerts.filter((a) => a.alert_level === "warning");
   const excellentPerformers = alerts.filter((a) => a.alert_level === "excellent");
 
+  // Precompute items grouped by category
+  const itemsByCategory = useMemo(() => {
+    return evaluationPoints.reduce((acc, item) => {
+      if (!acc[item.category]) acc[item.category] = [];
+      acc[item.category].push(item);
+      return acc;
+    }, {} as Record<string, typeof evaluationPoints>);
+  }, []);
+
+  const computeCategoryAverages = (evaluation: AgentEvaluation) => {
+    const scores = (evaluation as any).criteria_scores || {};
+    const result: Record<string, number> = {};
+
+    Object.entries(itemsByCategory).forEach(([category, items]) => {
+      const sum = items.reduce((acc, item) => acc + (Number(scores[item.id]) || 0), 0);
+      const count = items.length || 1;
+      result[category] = sum / count;
+    });
+
+    return result;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Agent Evaluations</h1>
-          <p className="text-muted-foreground">Weekly performance evaluations and coaching alerts for CS team agents</p>
+          <p className="text-muted-foreground">
+            Weekly performance evaluations and coaching alerts for the trading desk
+          </p>
         </div>
 
         {canManage && <EvaluationForm agents={agents} onSubmit={handleAddEvaluation} />}
@@ -319,14 +251,15 @@ export default function Evaluations() {
         {filteredEvaluations.map((evaluation) => {
           const alertBadge = getAlertBadge(evaluation.total_score);
           const AlertIcon = alertBadge.icon;
+          const categoryAverages = computeCategoryAverages(evaluation);
 
           return (
             <Card
               key={evaluation.id}
               className={cn(
                 "shadow-card hover:shadow-elegant transition-shadow",
-                evaluation.total_score <= 27 && "border-destructive bg-destructive/5",
-                evaluation.total_score >= 42 && "border-trading-profit bg-trading-profit/5"
+                evaluation.total_score <= maxScore * 0.6 && "border-destructive bg-destructive/5",
+                evaluation.total_score >= maxScore * 0.9 && "border-trading-profit bg-trading-profit/5"
               )}
             >
               <CardHeader className="pb-3">
@@ -350,56 +283,17 @@ export default function Evaluations() {
               <CardContent className="space-y-4">
                 <div className="text-center">
                   <div className="text-3xl font-bold">{evaluation.total_score}</div>
-                  <div className="text-sm text-muted-foreground">out of 45</div>
+                  <div className="text-sm text-muted-foreground">out of {maxScore}</div>
                 </div>
 
+                {/* Category averages */}
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Compliance:</span>
-                    <span className="font-medium">{evaluation.compliance_score}/5</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tone &amp; Clarity:</span>
-                    <span className="font-medium">{evaluation.tone_clarity_score}/5</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Relevance:</span>
-                    <span className="font-medium">{evaluation.relevance_score}/5</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Client Satisfaction:</span>
-                    <span className="font-medium">{evaluation.client_satisfaction_score}/5</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Portfolio Impact:</span>
-                    <span className="font-medium">{evaluation.portfolio_revenue_score}/5</span>
-                  </div>
-
-                  {/* new four criteria */}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Trading Tasks:</span>
-                    <span className="font-medium">
-                      {evaluation.trading_tasks_score != null ? `${evaluation.trading_tasks_score}/5` : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Discipline &amp; Compliance:</span>
-                    <span className="font-medium">
-                      {evaluation.discipline_compliance_score != null ? `${evaluation.discipline_compliance_score}/5` : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Attitude &amp; Conduct:</span>
-                    <span className="font-medium">
-                      {evaluation.attitude_conduct_score != null ? `${evaluation.attitude_conduct_score}/5` : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Client Metrics:</span>
-                    <span className="font-medium">
-                      {evaluation.client_metrics_score != null ? `${evaluation.client_metrics_score}/5` : "-"}
-                    </span>
-                  </div>
+                  {Object.entries(categoryAverages).map(([category, avg]) => (
+                    <div className="flex justify-between" key={category}>
+                      <span className="text-muted-foreground">{category}:</span>
+                      <span className="font-medium">{avg.toFixed(1)}/5</span>
+                    </div>
+                  ))}
                 </div>
 
                 {evaluation.overall_remarks && (
@@ -423,7 +317,6 @@ export default function Evaluations() {
 
                   {canManage && (
                     <>
-                      {/* IMPORTANT: pass id explicitly to update */}
                       <EvaluationForm
                         agents={agents}
                         onSubmit={(formData) => handleUpdateEvaluation(evaluation.id, formData)}
@@ -464,29 +357,21 @@ export default function Evaluations() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-lg">Evaluation Points</CardTitle>
-          <p className="text-sm text-muted-foreground">Key focus areas considered for agent evaluations</p>
+          <p className="text-sm text-muted-foreground">Granular criteria used in agent evaluations</p>
         </CardHeader>
         <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
-          {Object.entries(
-            evaluationPoints.reduce((acc, item) => {
-              if (!acc[item.category]) acc[item.category] = []
-              acc[item.category].push(item)
-              return acc
-            }, {} as Record<string, typeof evaluationPoints>)
-          ).map(([category, items]) => (
-            <div key={category} className="space-y-2">
-              <h3 className="font-semibold text-foreground">{category}</h3>
-
-              <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                {items.map((item) => (
-                  <li key={item.id}>{item.label}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
+          <div className="grid gap-4 md:grid-cols-2">
+            {Object.entries(itemsByCategory).map(([category, items]) => (
+              <div key={category} className="space-y-2">
+                <h3 className="font-semibold text-foreground">{category}</h3>
+                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                  {items.map((item) => (
+                    <li key={item.id}>{item.label}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -503,8 +388,13 @@ export default function Evaluations() {
       )}
 
       {/* Evaluation Details Dialog */}
-      <Dialog open={!!selectedEvaluation} onOpenChange={(open) => { if (!open) setSelectedEvaluation(null); }}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <Dialog
+        open={!!selectedEvaluation}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEvaluation(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Evaluation Details - {selectedEvaluation?.agent_name}</DialogTitle>
             {selectedEvaluation && (
@@ -518,7 +408,7 @@ export default function Evaluations() {
             <div className="space-y-6">
               <div className="text-center p-4 bg-accent rounded-lg">
                 <div className="text-4xl font-bold mb-2">{selectedEvaluation.total_score}</div>
-                <div className="text-sm text-muted-foreground mb-2">out of 45</div>
+                <div className="text-sm text-muted-foreground mb-2">out of {maxScore}</div>
                 <Badge variant={getAlertBadge(selectedEvaluation.total_score).variant}>
                   {selectedEvaluation.performance_level}
                 </Badge>
@@ -527,142 +417,31 @@ export default function Evaluations() {
               <div className="space-y-4">
                 <h4 className="font-medium">Detailed Scores</h4>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Compliance</p>
-                      <p className="text-sm text-muted-foreground">Calls via company lines, SOP followed, privacy ensured</p>
-                      {selectedEvaluation.compliance_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.compliance_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">{selectedEvaluation.compliance_score}/5</Badge>
-                  </div>
+                  {evaluationPoints.map((item) => {
+                    const scores = (selectedEvaluation as any).criteria_scores || {};
+                    const remarks = (selectedEvaluation as any).criteria_remarks || {};
+                    const score = scores[item.id];
 
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Tone &amp; Clarity</p>
-                      <p className="text-sm text-muted-foreground">Professional, polite, confident, clear communication</p>
-                      {selectedEvaluation.tone_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.tone_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">{selectedEvaluation.tone_clarity_score}/5</Badge>
-                  </div>
+                    if (typeof score !== "number") return null;
 
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Relevance</p>
-                      <p className="text-sm text-muted-foreground">Advice matches client needs, correct product use</p>
-                      {selectedEvaluation.relevance_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.relevance_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">{selectedEvaluation.relevance_score}/5</Badge>
-                  </div>
-
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Client Satisfaction</p>
-                      <p className="text-sm text-muted-foreground">Queries resolved, value delivered, client supported</p>
-                      {selectedEvaluation.satisfaction_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.satisfaction_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">{selectedEvaluation.client_satisfaction_score}/5</Badge>
-                  </div>
-
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Portfolio &amp; Revenue Impact</p>
-                      <p className="text-sm text-muted-foreground">Equity trends, NOTs achieved, retention efforts</p>
-                      {selectedEvaluation.portfolio_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.portfolio_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">{selectedEvaluation.portfolio_revenue_score}/5</Badge>
-                  </div>
-
-                  {/* A. Trading Tasks */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">A. Trading Tasks</p>
-                      <p className="text-sm text-muted-foreground">
-                        Daily trade calls, stop-loss accuracy, exposure discipline, NOTs performance.
-                      </p>
-                      {selectedEvaluation.trading_tasks_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.trading_tasks_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">
-                      {selectedEvaluation.trading_tasks_score}/5
-                    </Badge>
-                  </div>
-
-                  {/* B. Discipline & Compliance */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">B. Discipline &amp; Compliance</p>
-                      <p className="text-sm text-muted-foreground">
-                        Accurate execution, correct order placement &amp; reporting, PMEX &amp; SOP adherence, clean records.
-                      </p>
-                      {selectedEvaluation.discipline_compliance_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.discipline_compliance_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">
-                      {selectedEvaluation.discipline_compliance_score}/5
-                    </Badge>
-                  </div>
-
-                  {/* C. Attitude & Professional Conduct */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">C. Attitude &amp; Professional Conduct</p>
-                      <p className="text-sm text-muted-foreground">
-                        Patience, professionalism, call quality, market updates, pressure handling.
-                      </p>
-                      {selectedEvaluation.attitude_conduct_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.attitude_conduct_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">
-                      {selectedEvaluation.attitude_conduct_score}/5
-                    </Badge>
-                  </div>
-
-                  {/* D. Client Metrics */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">D. Client Metrics</p>
-                      <p className="text-sm text-muted-foreground">
-                        Client retention vs 60% target, Margin In vs 30% target, overall client health.
-                      </p>
-                      {selectedEvaluation.client_metrics_remarks && (
-                        <p className="text-sm text-blue-600 mt-1">
-                          <strong>Remarks:</strong> {selectedEvaluation.client_metrics_remarks}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline">
-                      {selectedEvaluation.client_metrics_score}/5
-                    </Badge>
-                  </div>
+                    return (
+                      <div className="flex justify-between items-start" key={item.id}>
+                        <div>
+                          <p className="font-medium">
+                            {item.label}
+                            <span className="ml-2 text-xs text-muted-foreground">({item.category})</span>
+                          </p>
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                          {remarks[item.id] && (
+                            <p className="text-sm text-blue-600 mt-1">
+                              <strong>Remarks:</strong> {remarks[item.id]}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline">{score}/5</Badge>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

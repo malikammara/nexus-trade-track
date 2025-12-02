@@ -6,14 +6,18 @@ import { useAuth } from '@/contexts/AuthProvider'
 const ADMIN_EMAIL_ALLOWLIST = new Set([
   'syedyousufhussainzaidi@gmail.com',
   'doctorcrack007@gmail.com',
+  'teamfalcons73@gmail.com'
 ])
 
-// helpers
-const isNonEmpty = (v: unknown): v is string =>
-  typeof v === 'string' && v.trim().length > 0
+export type AddEvaluationPayload = {
+  agent_id: string
+  week_start_date: string
+  criteria_scores: Record<string, number>
+  criteria_remarks: Record<string, string | null>
+  overall_remarks?: string | null
+}
 
-const firstNonEmpty = (...vals: Array<unknown>) =>
-  vals.find(isNonEmpty) ?? null
+export type UpdateEvaluationPayload = Partial<AddEvaluationPayload>
 
 export function useEvaluations() {
   const [evaluations, setEvaluations] = useState<AgentEvaluation[]>([])
@@ -30,12 +34,12 @@ export function useEvaluations() {
       setLoading(true)
       const { data, error } = await supabase.rpc('get_agent_evaluations', {
         p_agent_id: agentId ?? null,
-        p_limit: 50
+        p_limit: 50,
       })
       if (error) throw error
       setEvaluations(data ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(err instanceof Error ? err.message : 'An error occurred while fetching evaluations')
     } finally {
       setLoading(false)
     }
@@ -55,109 +59,15 @@ export function useEvaluations() {
     }
   }
 
-  // Map various possible field names (snake, camel, nested) -> the 3 canonical remark fields.
-  const normalizeRemarks = (src: any) => {
-    // try many common shapes/aliases and nested forms
-    const toneCandidates = [
-      src?.tone_remarks,
-      src?.toneRemarks,
-      src?.tone_clarity_remarks,
-      src?.toneClarityRemarks,
-      src?.remarks?.tone,
-      src?.remarks?.tone_clarity,
-      src?.remarks?.toneClarity,
-    ]
-    const satisfactionCandidates = [
-      src?.satisfaction_remarks,
-      src?.client_satisfaction_remarks,
-      src?.clientSatisfactionRemarks,
-      src?.remarks?.satisfaction,
-      src?.remarks?.client_satisfaction,
-      src?.remarks?.clientSatisfaction,
-    ]
-    const portfolioCandidates = [
-      src?.portfolio_remarks,
-      src?.portfolio_revenue_remarks,
-      src?.portfolioRevenueRemarks,
-      src?.remarks?.portfolio,
-      src?.remarks?.portfolio_revenue,
-      src?.remarks?.portfolioRevenue,
-    ]
-
-    return {
-      tone_remarks: firstNonEmpty(...toneCandidates),
-      satisfaction_remarks: firstNonEmpty(...satisfactionCandidates),
-      portfolio_remarks: firstNonEmpty(...portfolioCandidates),
-    }
-  }
-
-  const addEvaluation = async (evaluationData: {
-    agent_id: string
-    week_start_date: string
-
-    // Core 5 scores
-    compliance_score: number
-    tone_clarity_score: number
-    relevance_score: number
-    client_satisfaction_score: number
-    portfolio_revenue_score: number
-
-    // 🔹 NEW 4 scores
-    trading_tasks_score: number
-    discipline_compliance_score: number
-    attitude_conduct_score: number
-    client_metrics_score: number
-
-    // core remarks
-    compliance_remarks?: string
-    tone_remarks?: string
-    relevance_remarks?: string
-    satisfaction_remarks?: string
-    portfolio_remarks?: string
-    overall_remarks?: string
-
-    // 🔹 NEW remarks
-    trading_tasks_remarks?: string
-    discipline_compliance_remarks?: string
-    attitude_conduct_remarks?: string
-    client_metrics_remarks?: string
-
-    [key: string]: any
-  }) => {
+  const addEvaluation = async (evaluationData: AddEvaluationPayload) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can add evaluations')
     try {
-      const aliases = normalizeRemarks(evaluationData)
-
       const { data, error } = await supabase.rpc('add_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
         p_week_start_date: evaluationData.week_start_date,
-
-        // Core scores
-        p_compliance_score: evaluationData.compliance_score,
-        p_tone_clarity_score: evaluationData.tone_clarity_score,
-        p_relevance_score: evaluationData.relevance_score,
-        p_client_satisfaction_score: evaluationData.client_satisfaction_score,
-        p_portfolio_revenue_score: evaluationData.portfolio_revenue_score,
-
-        // 🔹 NEW scores (trading / discipline / attitude / client metrics)
-        p_trading_tasks_score: evaluationData.trading_tasks_score,
-        p_discipline_compliance_score: evaluationData.discipline_compliance_score,
-        p_attitude_conduct_score: evaluationData.attitude_conduct_score,
-        p_client_metrics_score: evaluationData.client_metrics_score,
-
-        // remarks – ensure undefined/"" -> null, prefer direct field if non-empty, else alias
-        p_compliance_remarks: firstNonEmpty(evaluationData.compliance_remarks),
-        p_tone_remarks: firstNonEmpty(evaluationData.tone_remarks, aliases.tone_remarks),
-        p_relevance_remarks: firstNonEmpty(evaluationData.relevance_remarks),
-        p_satisfaction_remarks: firstNonEmpty(evaluationData.satisfaction_remarks, aliases.satisfaction_remarks),
-        p_portfolio_remarks: firstNonEmpty(evaluationData.portfolio_remarks, aliases.portfolio_remarks),
-        p_overall_remarks: firstNonEmpty(evaluationData.overall_remarks),
-
-        // 🔹 NEW remarks
-        p_trading_tasks_remarks: firstNonEmpty(evaluationData.trading_tasks_remarks),
-        p_discipline_compliance_remarks: firstNonEmpty(evaluationData.discipline_compliance_remarks),
-        p_attitude_conduct_remarks: firstNonEmpty(evaluationData.attitude_conduct_remarks),
-        p_client_metrics_remarks: firstNonEmpty(evaluationData.client_metrics_remarks),
+        p_criteria_scores: evaluationData.criteria_scores,
+        p_criteria_remarks: evaluationData.criteria_remarks,
+        p_overall_remarks: evaluationData.overall_remarks ?? null,
       })
 
       if (error) throw error
@@ -171,41 +81,15 @@ export function useEvaluations() {
 
   const updateEvaluation = async (
     evaluationId: string,
-    updates: Partial<AgentEvaluation> & { [key: string]: any }
+    updates: UpdateEvaluationPayload & { [key: string]: any }
   ) => {
     if (!canManage) throw new Error('Unauthorized: Only admins can update evaluations')
     try {
-      const aliases = normalizeRemarks(updates)
-
       const { data, error } = await supabase.rpc('update_agent_evaluation', {
         p_evaluation_id: evaluationId,
-
-        // core scores
-        p_compliance_score: updates.compliance_score ?? null,
-        p_tone_clarity_score: updates.tone_clarity_score ?? null,
-        p_relevance_score: updates.relevance_score ?? null,
-        p_client_satisfaction_score: updates.client_satisfaction_score ?? null,
-        p_portfolio_revenue_score: updates.portfolio_revenue_score ?? null,
-
-        // 🔹 NEW scores (nullable on update)
-        p_trading_tasks_score: (updates as any).trading_tasks_score ?? null,
-        p_discipline_compliance_score: (updates as any).discipline_compliance_score ?? null,
-        p_attitude_conduct_score: (updates as any).attitude_conduct_score ?? null,
-        p_client_metrics_score: (updates as any).client_metrics_score ?? null,
-
-        // core remarks
-        p_compliance_remarks: firstNonEmpty((updates as any).compliance_remarks),
-        p_tone_remarks: firstNonEmpty((updates as any).tone_remarks, aliases.tone_remarks),
-        p_relevance_remarks: firstNonEmpty((updates as any).relevance_remarks),
-        p_satisfaction_remarks: firstNonEmpty((updates as any).satisfaction_remarks, aliases.satisfaction_remarks),
-        p_portfolio_remarks: firstNonEmpty((updates as any).portfolio_remarks, aliases.portfolio_remarks),
-        p_overall_remarks: firstNonEmpty((updates as any).overall_remarks),
-
-        // 🔹 NEW remarks
-        p_trading_tasks_remarks: firstNonEmpty((updates as any).trading_tasks_remarks),
-        p_discipline_compliance_remarks: firstNonEmpty((updates as any).discipline_compliance_remarks),
-        p_attitude_conduct_remarks: firstNonEmpty((updates as any).attitude_conduct_remarks),
-        p_client_metrics_remarks: firstNonEmpty((updates as any).client_metrics_remarks),
+        p_criteria_scores: updates.criteria_scores ?? null,
+        p_criteria_remarks: updates.criteria_remarks ?? null,
+        p_overall_remarks: updates.overall_remarks ?? null,
       })
 
       if (error) throw error
@@ -226,7 +110,7 @@ export function useEvaluations() {
         .eq('id', evaluationId)
 
       if (error) throw error
-      setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
+      setEvaluations((prev) => prev.filter((e) => e.id !== evaluationId))
       await fetchAlerts()
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to delete evaluation')
@@ -237,7 +121,7 @@ export function useEvaluations() {
     try {
       const { data, error } = await supabase.rpc('get_agent_evaluations', {
         p_agent_id: agentId,
-        p_limit: 20
+        p_limit: 20,
       })
       if (error) throw error
       return data ?? []
@@ -261,6 +145,6 @@ export function useEvaluations() {
     updateEvaluation,
     deleteEvaluation,
     getAgentEvaluations,
-    refetch: fetchEvaluations
+    refetch: fetchEvaluations,
   }
 }

@@ -8,6 +8,41 @@ export type EvaluationItem = {
 
 export const evaluationPoints: EvaluationItem[] = [
   {
+    id: 'compliance',
+    label: 'Compliance',
+    description:
+      'Calls only via company lines, SOP followed, no WhatsApp advice, privacy ensured.',
+    category: 'Core Criteria',
+  },
+  {
+    id: 'tone_clarity',
+    label: 'Tone & Clarity',
+    description:
+      'Professional, polite, confident, empathetic; clear and composed communication.',
+    category: 'Core Criteria',
+  },
+  {
+    id: 'relevance',
+    label: 'Relevance',
+    description:
+      'Advice matches client profile & needs, correct product selection, proper risk checks.',
+    category: 'Core Criteria',
+  },
+  {
+    id: 'client_satisfaction',
+    label: 'Client Satisfaction',
+    description:
+      'Queries resolved, value delivered, client feels supported, informed, and secure.',
+    category: 'Core Criteria',
+  },
+  {
+    id: 'portfolio_revenue',
+    label: 'Portfolio & Revenue Impact',
+    description:
+      'Weekly equity trend, NOTs achieved, exposure within SOP limits, visible retention effort.',
+    category: 'Core Criteria',
+  },
+  {
     id: "daily_trade_calls",
     label: "Daily Trade Calls",
     description: "Timely calls to clients regarding assigned products.",

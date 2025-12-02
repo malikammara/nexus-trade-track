@@ -307,12 +307,19 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
             <p className="text-xs text-muted-foreground">Use these as reference while scoring and adding remarks.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            {evaluationPoints.map((section) => (
-              <div key={section.title} className="space-y-2">
-                <p className="text-sm font-semibold text-foreground">{section.title}</p>
+            {Object.entries(
+              evaluationPoints.reduce((acc, item) => {
+                if (!acc[item.category]) acc[item.category] = []
+                acc[item.category].push(item)
+                return acc
+              }, {} as Record<string, typeof evaluationPoints>)
+            ).map(([category, items]) => (
+              <div key={category} className="space-y-2">
+                <p className="text-sm font-semibold text-foreground">{category}</p>
+
                 <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
-                  {section.items.map((item) => (
-                    <li key={item}>{item}</li>
+                  {items.map((item) => (
+                    <li key={item.id}>{item.label}</li>
                   ))}
                 </ul>
               </div>

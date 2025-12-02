@@ -467,18 +467,26 @@ export default function Evaluations() {
           <p className="text-sm text-muted-foreground">Key focus areas considered for agent evaluations</p>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            {evaluationPoints.map((section) => (
-              <div key={section.title} className="space-y-2">
-                <h3 className="font-semibold text-foreground">{section.title}</h3>
-                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                  {section.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {Object.entries(
+            evaluationPoints.reduce((acc, item) => {
+              if (!acc[item.category]) acc[item.category] = []
+              acc[item.category].push(item)
+              return acc
+            }, {} as Record<string, typeof evaluationPoints>)
+          ).map(([category, items]) => (
+            <div key={category} className="space-y-2">
+              <h3 className="font-semibold text-foreground">{category}</h3>
+
+              <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                {items.map((item) => (
+                  <li key={item.id}>{item.label}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
         </CardContent>
       </Card>
 

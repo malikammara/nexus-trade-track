@@ -268,7 +268,7 @@ export default function Evaluations() {
                     <CardTitle className="text-lg">{evaluation.agent_name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{evaluation.agent_email}</p>
                     <p className="text-xs text-muted-foreground">
-                      Week of {format(new Date(evaluation.week_start_date), "MMM dd, yyyy")}
+                    Date: {format(new Date(evaluation.week_start_date), "MMM dd, yyyy")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -398,10 +398,10 @@ export default function Evaluations() {
           <DialogHeader>
             <DialogTitle>Evaluation Details - {selectedEvaluation?.agent_name}</DialogTitle>
             {selectedEvaluation && (
-              <p className="text-sm text-muted-foreground">
-                Week of {format(new Date(selectedEvaluation.week_start_date), "MMM dd, yyyy")}
-              </p>
-            )}
+  <p className="text-sm text-muted-foreground">
+    Evaluation Date: {format(new Date(selectedEvaluation.week_start_date), "MMM dd, yyyy")}
+  </p>
+)}
           </DialogHeader>
 
           {selectedEvaluation && (

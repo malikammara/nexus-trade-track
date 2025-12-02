@@ -11,7 +11,7 @@ const ADMIN_EMAIL_ALLOWLIST = new Set([
 
 export type StpAddEvaluationPayload = {
   agent_id: string
-  week_start_date: string            // YYYY-MM-DD
+  week_start_date: string            // YYYY-MM-DD (DAILY)
   criteria_scores: Record<string, number>
   criteria_remarks: Record<string, string | null>
   overall_remarks?: string | null
@@ -76,7 +76,7 @@ export function useEvaluations() {
     try {
       const { data, error } = await supabase.rpc('stp_create_agent_evaluation', {
         p_agent_id: evaluationData.agent_id,
-        p_week_start_date: evaluationData.week_start_date,
+        p_evaluation_date: evaluationData.week_start_date,
         p_criteria_scores: evaluationData.criteria_scores,
         p_criteria_remarks: evaluationData.criteria_remarks,
         p_overall_remarks: evaluationData.overall_remarks ?? null,

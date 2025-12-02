@@ -1,13 +1,13 @@
 // src/constants/evaluationPoints.ts
 
-export type EvaluationItem = {
+export type EvaluationPointSection = {
   id: string
   label: string
   description: string
   category: string
 }
 
-export const evaluationPoints: EvaluationItem[] = [
+export const evaluationPoints: EvaluationPointSection[] = [
   /** -----------------------------
    *  A. TRADING TASKS (4 items)
    *  ----------------------------- */

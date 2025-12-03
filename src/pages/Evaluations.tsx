@@ -169,9 +169,12 @@ export default function Evaluations() {
   
   
 
-  const criticalAlerts = alerts.filter((a) => a.alert_level === "critical");
-  const warningAlerts = alerts.filter((a) => a.alert_level === "warning");
-  const excellentPerformers = alerts.filter((a) => a.alert_level === "excellent");
+  // Use the same thresholds as the cards/badges
+  const criticalAlerts = evaluations.filter((e) => e.total_score < 50);
+  const warningAlerts = evaluations.filter(
+    (e) => e.total_score >= 50 && e.total_score < 70
+  );
+  const excellentPerformers = evaluations.filter((e) => e.total_score >= 70);
 
   // Precompute items grouped by category
   const itemsByCategory = useMemo(() => {

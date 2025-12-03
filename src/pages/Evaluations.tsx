@@ -147,13 +147,26 @@ export default function Evaluations() {
   // thresholds for /maxScore
   const getAlertBadge = (score: number) => {
     if (score < 50)
-      return { variant: "destructive", icon: AlertTriangle, text: "Critical" }
+      return {
+        variant: "destructive",
+        icon: AlertTriangle,
+        text: "Critical",
+      }
   
     if (score < 70)
-      return { variant: "secondary", icon: AlertTriangle, text: "Needs Improvement" }
+      return {
+        variant: "warning",         // ORANGE badge
+        icon: AlertTriangle,
+        text: "Needs improvement",
+      }
   
-    return { variant: "default", icon: Award, text: "Excellent" }
+    return {
+      variant: "success",           // GREEN badge
+      icon: Award,
+      text: "Excellent",
+    }
   }
+  
   
 
   const criticalAlerts = alerts.filter((a) => a.alert_level === "critical");
@@ -275,10 +288,19 @@ export default function Evaluations() {
               key={evaluation.id}
               className={cn(
                 "shadow-card hover:shadow-elegant transition-shadow",
-                evaluation.total_score <= maxScore * 0.6 && "border-destructive bg-destructive/5",
-                evaluation.total_score >= maxScore * 0.9 && "border-trading-profit bg-trading-profit/5"
+
+                evaluation.total_score < 50 &&
+                  "border-destructive bg-destructive/10",   // 🔴 Critical (red)
+
+                evaluation.total_score >= 50 &&
+                evaluation.total_score < 70 &&
+                  "border-orange-500 bg-orange-500/10",     // 🟠 Needs improvement (orange)
+
+                evaluation.total_score >= 70 &&
+                  "border-trading-profit bg-trading-profit/10" // 🟢 Excellent (green)
               )}
             >
+
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">

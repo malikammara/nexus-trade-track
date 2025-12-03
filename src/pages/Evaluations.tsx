@@ -146,11 +146,15 @@ export default function Evaluations() {
 
   // thresholds for /maxScore
   const getAlertBadge = (score: number) => {
-    if (score <= maxScore * 0.6) return { variant: "destructive" as const, icon: AlertTriangle, text: "Critical" };
-    if (score <= maxScore * 0.75) return { variant: "secondary" as const, icon: AlertTriangle, text: "Warning" };
-    if (score <= maxScore * 0.9) return { variant: "default" as const, icon: CheckCircle, text: "Good" };
-    return { variant: "default" as const, icon: Award, text: "Excellent" };
-  };
+    if (score < 50)
+      return { variant: "destructive", icon: AlertTriangle, text: "Critical" }
+  
+    if (score < 70)
+      return { variant: "secondary", icon: AlertTriangle, text: "Needs Improvement" }
+  
+    return { variant: "default", icon: Award, text: "Excellent" }
+  }
+  
 
   const criticalAlerts = alerts.filter((a) => a.alert_level === "critical");
   const warningAlerts = alerts.filter((a) => a.alert_level === "warning");

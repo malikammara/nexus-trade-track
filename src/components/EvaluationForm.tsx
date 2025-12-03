@@ -123,17 +123,15 @@ export function EvaluationForm({ agents, onSubmit, evaluation, isEditing = false
 
   // Performance bands for /70 (if 14 items)
   const getPerformanceLevel = (score: number) => {
-    if (score <= maxScore * 0.6) {
-      return { level: 'Immediate Coaching', color: 'text-destructive', bg: 'bg-destructive/10' }
-    }
-    if (score <= maxScore * 0.75) {
+    if (score < 50)
+      return { level: 'Critical', color: 'text-destructive', bg: 'bg-destructive/10' }
+  
+    if (score < 70)
       return { level: 'Needs Improvement', color: 'text-warning', bg: 'bg-warning/10' }
-    }
-    if (score <= maxScore * 0.9) {
-      return { level: 'Strong Performance', color: 'text-success', bg: 'bg-success/10' }
-    }
+  
     return { level: 'Excellent', color: 'text-trading-profit', bg: 'bg-trading-profit/10' }
   }
+  
 
   const performance = getPerformanceLevel(totalScore)
 
